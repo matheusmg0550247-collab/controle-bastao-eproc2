@@ -458,11 +458,9 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            duration = datetime.now() - st.session_state['current_status_starts'][selected_name]\n",
         "            log_status_change(selected_name, old_status, 'Pulou Turno (Fora da Fila)', duration)\n",
         "            \n",
-        "            # --- ⬇️ MUDANÇA AQUI (Lógica Principal "Pular") ⬇️ ---",
-        "            # 3. NÃO Remove da fila principal. Apenas adiciona à lista de pulo.",
-        "            # queue.remove(selected_name) # <-- ESTA LINHA FOI REMOVIDA (COMENTADA)",
+        "            # 3. NÃO Remove da fila principal. Apenas adiciona à lista de pulo.\n",
+        "            # queue.remove(selected_name) # <-- LINHA REMOVIDA\n",
         "            st.session_state['skipped_consultors'].append(selected_name)\n",
-        "            # --- ⬆️ MUDANÇA AQUI ⬆️ ---",
         "            \n",
         "            # 4. Limpa o status e ativa o marcador visual\n",
         "            st.session_state['status_texto'][selected_name] = '' \n",
@@ -470,7 +468,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            \n",
         "            # 5. O CHECKBOX DEVE PERMANECER MARCADO (NÃO FAZER NADA AQUI)\n",
         "            \n",
-        "            # 6. Tenta passar o bastão para o próximo (A LÓGICA DE 'check_and_assume_baton' JÁ SABE PULAR)",
+        "            # 6. Tenta passar o bastão para o próximo (A LÓGICA DE 'check_and_assume_baton' JÁ SABE PULAR)\n",
         "            check_and_assume_baton()\n",
         "            save_state()\n",
         "            st.rerun()\n",
@@ -572,15 +570,11 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    else:",
         "        col_time.markdown('#### 🕒 Tempo: --:--:--')",
         "",
-        
         "    if responsavel:",
-        # --- ⬇️ MUDANÇA AQUI (Estilo da Tarja) ⬇️ ---
         "        display_responsavel_html = f'<span style=\"background-color: #E75480; color: white; padding: 5px 10px; border-radius: 5px; font-size: 2em; font-weight: bold;\">🔥 {responsavel}</span>'",
         "        st.markdown(display_responsavel_html, unsafe_allow_html=True)",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "    else:",
         "        st.markdown(f'## (Ninguém com o bastão)')",
-        
         '    st.markdown("###")',
         "",
         '    st.header("Próximos da Fila")',
@@ -619,7 +613,6 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    st.button('🔄 Atualizar (Manual)', on_click=manual_rerun, use_container_width=True)",
         '    st.markdown("---")',
         "",
-        
         "with col_disponibilidade:",
         "    st.header('Status dos Consultores')",
         "    st.markdown('Marque/Desmarque para entrar/sair da fila.')",
@@ -652,11 +645,8 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            list_almoco.append(nome)",
         "        elif status == 'Saída Temporária':",
         "            list_saida.append(nome)",
-        
-        # --- ⬇️ MUDANÇA AQUI (Lógica "Pular" não é mais "Indisponível") ⬇️ ---
-        "        elif (not is_checked):", # Apenas quem está desmarcado
+        "        elif (not is_checked):",
         "            list_indisponivel.append(nome)",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "    # 2. Renderizar seções",
         "",
@@ -671,8 +661,6 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            is_disabled = nome in st.session_state['skipped_consultors']",
         "            col_check.checkbox(' ', key=checkbox_key, on_change=update_queue, args=(nome,), disabled=is_disabled, label_visibility='collapsed')",
         "            ",
-        
-        # --- ⬇️ MUDANÇA AQUI (Lógica de Exibição "Pular") ⬇️ ---
         "            if nome == responsavel_atual:",
         "                display_html = f'<span style=\"background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;\">🔥 {nome}</span>'",
         "                col_nome.markdown(display_html, unsafe_allow_html=True)",
@@ -680,7 +668,6 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "                col_nome.markdown(f'**{nome}** :orange-background[Pulou]', unsafe_allow_html=True)",
         "            else:",
         "                col_nome.markdown(f'**{nome}** :blue-background[Na Fila]', unsafe_allow_html=True)",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "    st.markdown('---')",
         "",
@@ -728,10 +715,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        checkbox_key = f'check_{nome}'",
         "        is_disabled = nome in st.session_state['skipped_consultors']",
         "        col_check.checkbox(' ', key=checkbox_key, on_change=update_queue, args=(nome,), disabled=is_disabled, label_visibility='collapsed')",
-        
-        # --- ⬇️ MUDANÇA AQUI (Lógica "Pular" removida desta lista) ⬇️ ---
         "        col_nome.markdown(f'**{nome}** :grey-background[Indisponível]', unsafe_allow_html=True)",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "    current_hour = datetime.now().hour",
         "    today = datetime.now().date()",
