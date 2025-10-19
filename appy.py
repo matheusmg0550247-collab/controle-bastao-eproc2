@@ -89,7 +89,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        'skip_status_display': st.session_state.skip_status_display,",
         "        'skipped_consultors': st.session_state.skipped_consultors,",
         "        'cycle_start_marker': st.session_state.cycle_start_marker,",
-        "        'rotation_gif_start_time': st.session_state.get('rotation_gif_start_time'),", # ⬅️ MUDANÇA AQUI
+        "        'rotation_gif_start_time': st.session_state.get('rotation_gif_start_time'),",
         "    }",
         "    try:",
         "        with open(STATE_FILE, 'w') as f:",
@@ -111,8 +111,8 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "                    if time_str:",
         "                        data['current_status_starts'][consultor] = datetime.fromisoformat(time_str)",
         "            ",
-        "            if 'rotation_gif_start_time' in data and data.get('rotation_gif_start_time'):", # ⬅️ MUDANÇA AQUI
-        "                data['rotation_gif_start_time'] = datetime.fromisoformat(data['rotation_gif_start_time'])", # ⬅️ MUDANÇA AQUI
+        "            if 'rotation_gif_start_time' in data and data.get('rotation_gif_start_time'):",
+        "                data['rotation_gif_start_time'] = datetime.fromisoformat(data['rotation_gif_start_time'])",
         "            ",
         "            return data",
         "        except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError) as e:",
@@ -143,14 +143,16 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         '            return False',
         '    return False',
         "",
-        "def play_sound_html():", # ⬅️ MUDANÇA AQUI
-        '    NEW_SOUND_URL = "https://drive.google.com/uc?export=download&id=1QNq7M6Hn0UCV-R6Cf-lLbn9DJhz4BgyE"',
+        "def play_sound_html():",
+        # --- ⬇️ MUDANÇA AQUI (URL DO SOM) ⬇️ ---
+        '    NEW_SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"',
         '    return f"""',
         '<audio autoplay="true">',
         '        <source src="{NEW_SOUND_URL}" type="audio/mpeg">',
         '        Seu navegador não suporta o elemento de áudio.',
         '</audio>',
         '"""',
+        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "def load_logs():",
         "    try:",
@@ -292,7 +294,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    st.session_state['skip_status_display'] = persisted_state.get('skip_status_display', {nome: False for nome in CONSULTORES})",
         "    st.session_state['skipped_consultors'] = persisted_state.get('skipped_consultors', [])",
         "    st.session_state['cycle_start_marker'] = persisted_state.get('cycle_start_marker', None)",
-        "    st.session_state['rotation_gif_start_time'] = persisted_state.get('rotation_gif_start_time', None)", # ⬅️ MUDANÇA AQUI
+        "    st.session_state['rotation_gif_start_time'] = persisted_state.get('rotation_gif_start_time', None)",
         "    ",
         "    for nome in CONSULTORES:",
         "        checkbox_key = f'check_{nome}'",
@@ -306,7 +308,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "def manual_rerun():", 
         "    st.session_state['gif_warning'] = False ", 
-        "    st.session_state['rotation_gif_start_time'] = None", # ⬅️ MUDANÇA AQUI
+        "    st.session_state['rotation_gif_start_time'] = None",
         "    st.rerun()", 
         "    ",
         "def check_and_assume_baton(consultor=None):\n",
@@ -348,7 +350,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    \n",
         "def update_queue(consultor):\n",
         "    st.session_state['gif_warning'] = False \n",
-        "    st.session_state['rotation_gif_start_time'] = None", # ⬅️ MUDANÇA AQUI
+        "    st.session_state['rotation_gif_start_time'] = None",
         "    checkbox_key = f'check_{consultor}'\n",
         "    is_checked = st.session_state.get(checkbox_key, False)\n",
         "    old_status = st.session_state['status_texto'].get(consultor, '') or 'Disponível'\n",
@@ -428,18 +430,18 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            st.session_state['skip_status_display'][antigo_responsavel] = False \n",
         "            checkbox_key = f'check_{selected_name}'\n",
         "            st.session_state[checkbox_key] = True\n",
-        "            st.session_state['rotation_gif_start_time'] = datetime.now()", # ⬅️ MUDANÇA AQUI
+        "            st.session_state['rotation_gif_start_time'] = datetime.now()",
         "            \n",
         "            check_and_assume_baton()\n",
         "            st.rerun()\n",
         "        else:\n",
         "            st.session_state['gif_warning'] = True \n",
-        "            st.session_state['rotation_gif_start_time'] = None", # ⬅️ MUDANÇA AQUI
+        "            st.session_state['rotation_gif_start_time'] = None",
         "            st.rerun()\n",
         "    \n",
         "def skip_turn():\n",
         "    st.session_state['gif_warning'] = False \n",
-        "    st.session_state['rotation_gif_start_time'] = None", # ⬅️ MUDANÇA AQUI
+        "    st.session_state['rotation_gif_start_time'] = None",
         "    selected_name = st.session_state.get('consultor_selectbox', 'Selecione um nome')\n",
         "    if selected_name != 'Selecione um nome' and selected_name in st.session_state['status_texto']:\n",
         "        \n",
@@ -485,7 +487,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "def update_status(status_text, change_to_available):\n",
         "    selected_name = st.session_state.get('consultor_selectbox', 'Selecione um nome')\n",
         "    st.session_state['gif_warning'] = False \n",
-        "    st.session_state['rotation_gif_start_time'] = None", # ⬅️ MUDANÇA AQUI
+        "    st.session_state['rotation_gif_start_time'] = None",
         "    \n",
         "    if selected_name != 'Selecione um nome' and selected_name in st.session_state['status_texto']:\n",
         "        old_status = st.session_state['status_texto'].get(selected_name, '') or 'Disponível'\n",
@@ -525,8 +527,8 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "if 'gif_warning' not in st.session_state:",
         "    st.session_state['gif_warning'] = False",
-        "if 'rotation_gif_start_time' not in st.session_state:", # ⬅️ MUDANÇA AQUI
-        "    st.session_state['rotation_gif_start_time'] = None", # ⬅️ MUDANÇA AQUI
+        "if 'rotation_gif_start_time' not in st.session_state:",
+        "    st.session_state['rotation_gif_start_time'] = None",
         "if 'play_sound' not in st.session_state:",
         "    st.session_state['play_sound'] = False",
         "if 'last_rerun_time' not in st.session_state:",
@@ -543,12 +545,10 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')",
         'st.markdown("<hr style=\\"border: 1px solid #E75480;\\">", unsafe_allow_html=True)',
         "",
-        "# ⬅️ MUDANÇA AQUI (LÓGICA DO SOM)",
         "if st.session_state.get('play_sound', False):",
         "    st.components.v1.html(play_sound_html(), height=0, width=0)",
         "    st.session_state['play_sound'] = False # Reset after playing",
         "",
-        "# ⬅️ MUDANÇA AQUI (LÓGICA DO GIF TIMER)",
         "gif_start_time = st.session_state.get('rotation_gif_start_time', None)",
         "show_gif = False",
         "if gif_start_time:",
