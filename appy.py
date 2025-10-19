@@ -36,13 +36,11 @@ CONSULTORES = [
 
 def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, public_url):
     
-    # ⬇️ NOVOS VALORES INJETADOS AQUI ⬇️
-    
     # GIF de Aviso (Não mexer no bastão)
     warning_gif_url = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
     
     # GIF de Rotação (Snoop Dogg)
-    rotation_gif_url = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/JpkZEKWY0s9QI4DGvF/giphy.gif'
+    rotation_gif_url = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
     
     
     app_code_lines = [
@@ -69,12 +67,8 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "PLAYBACK_TIME_MS = 10000",
         "STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']",
         "STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        f"GIF_URL_WARNING = '{warning_gif_url}'", # Gif de "erro/aviso"
-        f"GIF_URL_ROTATION = '{rotation_gif_url}'", # Gif de "sucesso/rotação"
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        f"GIF_URL_WARNING = '{warning_gif_url}'",
+        f"GIF_URL_ROTATION = '{rotation_gif_url}'",
         "",
         "# --- Funções de Persistência de Estado ---",
         "",
@@ -95,11 +89,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        'skip_status_display': st.session_state.skip_status_display,",
         "        'skipped_consultors': st.session_state.skipped_consultors,",
         "        'cycle_start_marker': st.session_state.cycle_start_marker,",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "        'show_rotation_gif': st.session_state.get('show_rotation_gif', False),", # Salva o estado do novo GIF
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "        'show_rotation_gif': st.session_state.get('show_rotation_gif', False),",
         "    }",
         "    try:",
         "        with open(STATE_FILE, 'w') as f:",
@@ -297,11 +287,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    st.session_state['skip_status_display'] = persisted_state.get('skip_status_display', {nome: False for nome in CONSULTORES})",
         "    st.session_state['skipped_consultors'] = persisted_state.get('skipped_consultors', [])",
         "    st.session_state['cycle_start_marker'] = persisted_state.get('cycle_start_marker', None)",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "    st.session_state['show_rotation_gif'] = persisted_state.get('show_rotation_gif', False)", # Carrega o estado do novo GIF
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "    st.session_state['show_rotation_gif'] = persisted_state.get('show_rotation_gif', False)",
         "    ",
         "    for nome in CONSULTORES:",
         "        checkbox_key = f'check_{nome}'",
@@ -315,11 +301,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "def manual_rerun():", 
         "    st.session_state['gif_warning'] = False ", 
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "    st.session_state['show_rotation_gif'] = False # Limpa o GIF de rotação",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "    st.session_state['show_rotation_gif'] = False",
         "    st.rerun()", 
         "    ",
         "def check_and_assume_baton(consultor=None):\n",
@@ -361,11 +343,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    \n",
         "def update_queue(consultor):\n",
         "    st.session_state['gif_warning'] = False \n",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "    st.session_state['show_rotation_gif'] = False # Limpa o GIF de rotação",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "    st.session_state['show_rotation_gif'] = False",
         "    checkbox_key = f'check_{consultor}'\n",
         "    is_checked = st.session_state.get(checkbox_key, False)\n",
         "    old_status = st.session_state['status_texto'].get(consultor, '') or 'Disponível'\n",
@@ -445,30 +423,18 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            st.session_state['skip_status_display'][antigo_responsavel] = False \n",
         "            checkbox_key = f'check_{selected_name}'\n",
         "            st.session_state[checkbox_key] = True\n",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "            st.session_state['show_rotation_gif'] = True # ATIVA O GIF DE SUCESSO",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "            st.session_state['show_rotation_gif'] = True",
         "            \n",
         "            check_and_assume_baton()\n",
         "            st.rerun()\n",
         "        else:\n",
         "            st.session_state['gif_warning'] = True \n",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "            st.session_state['show_rotation_gif'] = False # Garante que o GIF de sucesso não apareça no erro",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "            st.session_state['show_rotation_gif'] = False",
         "            st.rerun()\n",
         "    \n",
         "def skip_turn():\n",
         "    st.session_state['gif_warning'] = False \n",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "    st.session_state['show_rotation_gif'] = False # Limpa o GIF de rotação",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "    st.session_state['show_rotation_gif'] = False",
         "    selected_name = st.session_state.get('consultor_selectbox', 'Selecione um nome')\n",
         "    if selected_name != 'Selecione um nome' and selected_name in st.session_state['status_texto']:\n",
         "        \n",
@@ -492,9 +458,11 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            duration = datetime.now() - st.session_state['current_status_starts'][selected_name]\n",
         "            log_status_change(selected_name, old_status, 'Pulou Turno (Fora da Fila)', duration)\n",
         "            \n",
-        "            # 3. Remove da fila principal e adiciona à lista de pulo\n",
-        "            queue.remove(selected_name)\n",
+        "            # --- ⬇️ MUDANÇA AQUI (Lógica Principal "Pular") ⬇️ ---",
+        "            # 3. NÃO Remove da fila principal. Apenas adiciona à lista de pulo.",
+        "            # queue.remove(selected_name) # <-- ESTA LINHA FOI REMOVIDA (COMENTADA)",
         "            st.session_state['skipped_consultors'].append(selected_name)\n",
+        "            # --- ⬆️ MUDANÇA AQUI ⬆️ ---",
         "            \n",
         "            # 4. Limpa o status e ativa o marcador visual\n",
         "            st.session_state['status_texto'][selected_name] = '' \n",
@@ -502,7 +470,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            \n",
         "            # 5. O CHECKBOX DEVE PERMANECER MARCADO (NÃO FAZER NADA AQUI)\n",
         "            \n",
-        "            # 6. Tenta passar o bastão para o próximo\n",
+        "            # 6. Tenta passar o bastão para o próximo (A LÓGICA DE 'check_and_assume_baton' JÁ SABE PULAR)",
         "            check_and_assume_baton()\n",
         "            save_state()\n",
         "            st.rerun()\n",
@@ -514,11 +482,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "def update_status(status_text, change_to_available):\n",
         "    selected_name = st.session_state.get('consultor_selectbox', 'Selecione um nome')\n",
         "    st.session_state['gif_warning'] = False \n",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "    st.session_state['show_rotation_gif'] = False # Limpa o GIF de rotação",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "    st.session_state['show_rotation_gif'] = False",
         "    \n",
         "    if selected_name != 'Selecione um nome' and selected_name in st.session_state['status_texto']:\n",
         "        old_status = st.session_state['status_texto'].get(selected_name, '') or 'Disponível'\n",
@@ -558,12 +522,8 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "if 'gif_warning' not in st.session_state:",
         "    st.session_state['gif_warning'] = False",
-        
-        # --- ⬇️ MUDANÇA AQUI ⬇️ ---
-        "if 'show_rotation_gif' not in st.session_state:", # Inicializa o estado do novo GIF
+        "if 'show_rotation_gif' not in st.session_state:",
         "    st.session_state['show_rotation_gif'] = False",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
         "if 'play_sound' not in st.session_state:",
         "    st.session_state['play_sound'] = False",
         "if 'last_rerun_time' not in st.session_state:",
@@ -580,18 +540,14 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')",
         'st.markdown("<hr style=\\"border: 1px solid #E75480;\\">", unsafe_allow_html=True)',
         "",
-        
-        # --- ⬇️ MUDANÇA AQUI (Exibe GIF de Rotação) ⬇️ ---
         "if st.session_state.get('show_rotation_gif', False):",
         "    col_gif_rot, col_gif_spacer = st.columns([0.3, 0.7])",
         "    col_gif_rot.image(GIF_URL_ROTATION, width=200, caption='BASTÃO GIRADO!')",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
         "",
         "if st.session_state['gif_warning']:",
         "    st.error('🚫 Apenas o consultor com o bastão pode transferir o bastão!')",
         "    col_gif, col_spacer = st.columns([0.2, 0.8])",
-        "    col_gif.image(GIF_URL_WARNING, width=150)", # Usa o GIF de aviso
+        "    col_gif.image(GIF_URL_WARNING, width=150)",
         "",
         'col_principal, col_disponibilidade = st.columns([1.5, 1])',
         "",
@@ -617,24 +573,21 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        col_time.markdown('#### 🕒 Tempo: --:--:--')",
         "",
         
-        # --- ⬇️ MUDANÇA AQUI (Fonte Maior) ⬇️ ---
         "    if responsavel:",
-        "        st.markdown(f'## {responsavel}')", # Fonte aumentada
+        # --- ⬇️ MUDANÇA AQUI (Estilo da Tarja) ⬇️ ---
+        "        display_responsavel_html = f'<span style=\"background-color: #E75480; color: white; padding: 5px 10px; border-radius: 5px; font-size: 2em; font-weight: bold;\">🔥 {responsavel}</span>'",
+        "        st.markdown(display_responsavel_html, unsafe_allow_html=True)",
+        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "    else:",
         "        st.markdown(f'## (Ninguém com o bastão)')",
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         
         '    st.markdown("###")',
         "",
         '    st.header("Próximos da Fila")',
         "    if proximo_responsavel:",
-        
-        # --- ⬇️ MUDANÇA AQUI (Fonte Maior) ⬇️ ---
-        "        st.markdown(f'### 1º: **{proximo_responsavel}**')", # Fonte aumentada
+        "        st.markdown(f'### 1º: **{proximo_responsavel}**')",
         "        if fila_restante:",
-        "            st.markdown(f'#### 2º em diante: {', '.join(fila_restante)}')", # Fonte levemente aumentada
-        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
-        
+        "            st.markdown(f'#### 2º em diante: {', '.join(fila_restante)}')",
         "    else:",
         '        st.markdown("*Fila vazia. Marque consultores como Disponíveis.*")',
         "    ",
@@ -667,7 +620,6 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         '    st.markdown("---")',
         "",
         
-        # --- ⬇️ MUDANÇA GERAL AQUI (Listas Separadas) ⬇️ ---
         "with col_disponibilidade:",
         "    st.header('Status dos Consultores')",
         "    st.markdown('Marque/Desmarque para entrar/sair da fila.')",
@@ -677,7 +629,6 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    list_atividade = []",
         "    list_almoco = []",
         "    list_saida = []",
-        "    list_pulou = []",
         "    list_indisponivel = []",
         "",
         "    responsavel_atual = st.session_state['bastao_queue'][0] if st.session_state['bastao_queue'] else ''",
@@ -689,22 +640,23 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    # Agora, categoriza todos os outros",
         "    for nome in CONSULTORES:",
         "        if nome in list_na_fila_ordenada:",
-        "            continue # Já está na lista principal",
+        "            continue # Já está na lista principal (seja 'na fila', 'bastão' ou 'pulou')",
         "",
         "        status = st.session_state['status_texto'].get(nome, '')",
         "        is_checked = st.session_state.get(f'check_{nome}', False)",
         "        is_skipped = nome in st.session_state['skipped_consultors']",
         "",
-        "        if is_skipped and is_checked:",
-        "            list_pulou.append(nome)",
-        "        elif status == 'Atividade':",
+        "        if status == 'Atividade':",
         "            list_atividade.append(nome)",
         "        elif status == 'Almoço':",
         "            list_almoco.append(nome)",
         "        elif status == 'Saída Temporária':",
         "            list_saida.append(nome)",
-        "        elif not is_checked:",
+        
+        # --- ⬇️ MUDANÇA AQUI (Lógica "Pular" não é mais "Indisponível") ⬇️ ---
+        "        elif (not is_checked):", # Apenas quem está desmarcado
         "            list_indisponivel.append(nome)",
+        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "    # 2. Renderizar seções",
         "",
@@ -719,12 +671,16 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            is_disabled = nome in st.session_state['skipped_consultors']",
         "            col_check.checkbox(' ', key=checkbox_key, on_change=update_queue, args=(nome,), disabled=is_disabled, label_visibility='collapsed')",
         "            ",
-        "            # Lógica da Tarja em Fogo",
+        
+        # --- ⬇️ MUDANÇA AQUI (Lógica de Exibição "Pular") ⬇️ ---
         "            if nome == responsavel_atual:",
-        "                display_status = f'<span style=\"background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px;\">**🔥 BASTÃO**</span>'",
+        "                display_html = f'<span style=\"background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;\">🔥 {nome}</span>'",
+        "                col_nome.markdown(display_html, unsafe_allow_html=True)",
+        "            elif nome in st.session_state['skipped_consultors']:",
+        "                col_nome.markdown(f'**{nome}** :orange-background[Pulou]', unsafe_allow_html=True)",
         "            else:",
-        "                display_status = ':blue-background[Na Fila]'",
-        "            col_nome.markdown(f'**{nome}** {display_status}', unsafe_allow_html=True)",
+        "                col_nome.markdown(f'**{nome}** :blue-background[Na Fila]', unsafe_allow_html=True)",
+        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "    st.markdown('---')",
         "",
@@ -764,18 +720,6 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "    st.markdown('---')",
         "",
-        "    # --- SEÇÃO PULOU ---",
-        "    st.subheader(f'🚫 Pulou a Vez ({len(list_pulou)})')",
-        "    if not list_pulou: st.markdown('_Ninguém pulou a vez._')",
-        "    for nome in list_pulou:",
-        "        col_nome, col_check = st.columns([0.8, 0.2])",
-        "        checkbox_key = f'check_{nome}'",
-        "        is_disabled = nome in st.session_state['skipped_consultors']",
-        "        col_check.checkbox(' ', key=checkbox_key, on_change=update_queue, args=(nome,), disabled=is_disabled, label_visibility='collapsed')",
-        "        col_nome.markdown(f'**{nome}** :orange-background[Pulou]', unsafe_allow_html=True)",
-        "",
-        "    st.markdown('---')",
-        "",
         "    # --- SEÇÃO INDISPONÍVEL ---",
         "    st.subheader(f'❌ Indisponível ({len(list_indisponivel)})')",
         "    if not list_indisponivel: st.markdown('_Todos na fila!_')",
@@ -784,9 +728,10 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        checkbox_key = f'check_{nome}'",
         "        is_disabled = nome in st.session_state['skipped_consultors']",
         "        col_check.checkbox(' ', key=checkbox_key, on_change=update_queue, args=(nome,), disabled=is_disabled, label_visibility='collapsed')",
-        "        col_nome.markdown(f'**{nome}** :grey-background[Indisponível]', unsafe_allow_html=True)",
-        # --- ⬆️ FIM DA MUDANÇA GERAL ⬆️ ---
         
+        # --- ⬇️ MUDANÇA AQUI (Lógica "Pular" removida desta lista) ⬇️ ---
+        "        col_nome.markdown(f'**{nome}** :grey-background[Indisponível]', unsafe_allow_html=True)",
+        # --- ⬆️ MUDANÇA AQUI ⬆️ ---
         "",
         "    current_hour = datetime.now().hour",
         "    today = datetime.now().date()",
