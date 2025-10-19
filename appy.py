@@ -17,15 +17,15 @@ from streamlit_autorefresh import st_autorefresh
 
 
 # 🛑 WEBHOOK DE RELATÓRIO DIÁRIO (MANTIDO)
-
-GOOGLE_CHAT_WEBHOOK_RELATORIO = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
-
+# DESABILITADO TEMPORARIAMENTE:
+# GOOGLE_CHAT_WEBHOOK_RELATORIO = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
+GOOGLE_CHAT_WEBHOOK_RELATORIO = ""
 
 
 # ⬇️ NOVO WEBHOOK PARA NOTIFICAÇÃO IMEDIATA DE TROCA DE BASTÃO
-
-CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
-
+# DESABILITADO TEMPORARIAMENTE:
+# CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
+CHAT_WEBHOOK_BASTAO = ""
 
 
 BASTAO_EMOJI = "🌸"
@@ -246,7 +246,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
 
         '<audio autoplay="true">',
 
-        '            <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mp3">',
+        '        <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mp3">',
 
         '</audio>',
 
@@ -584,7 +584,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
 
         "        if nome in st.session_state['skipped_consultors']:\n",
 
-        "             continue \n",
+        "            continue \n",
 
         "        \n",
 
@@ -896,9 +896,9 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
 
         "        elif current_status == 'Bastão':\n",
 
-        "             st.warning('O consultor com o bastão deve usar o botão **Bastão** ou **Status de Saída**.')\n",
+        "            st.warning('O consultor com o bastão deve usar o botão **Bastão** ou **Status de Saída**.')\n",
 
-        "             return\n",
+        "            return\n",
 
         "    \n",
 
@@ -1006,7 +1006,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
 
         "st.markdown(\"""<style>div.stAlert { display: none !important; }</style>\"\"\", unsafe_allow_html=True)",
 
-        
+        "",
 
         'st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")',
 
@@ -1096,7 +1096,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
 
         '        st.markdown("*Fila vazia. Marque consultores como Disponíveis.*")',
 
-        
+        "",
 
         # ADICIONA A EXIBIÇÃO DE QUEM PULOU A VEZ
 
@@ -1106,7 +1106,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
 
         "        st.markdown(f'<span style=\"color:orange;\">🚫 Pulou a vez (Volta no próximo ciclo):</span> {skipped_list}', unsafe_allow_html=True)",
 
-        
+        "",
 
         '    st.markdown("###")',
 
