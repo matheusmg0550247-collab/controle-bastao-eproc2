@@ -34,8 +34,673 @@ BASTAO_EMOJI = "🌸"
 
 # ⬅️ URL PERMANENTE DO SEU APP (Substitua se usou outro nome)
 
-APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app' 
+APP_URL_CLOUD = 'https.controle-bastao-cesupe.streamlit.app' 
 
+
+
+CONSULTORES = [
+
+    "Barbara", "Bruno", "Claudia", "Douglas", "Fábio", "Glayce", "Isac",
+
+    "Isabela", "Ivana", "Leonardo", "Morôni", "Michael", "Pablo", "Ranyer",
+
+    "Victoria"
+
+]
+
+
+
+# --- 4. CÓDIGO DO APP STREAMLIT (app.py) ---
+
+def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, public_url):
+
+    app_code_lines = [
+
+        "import streamlit as st",
+
+        "import pandas as pd",
+
+        "import requests",
+
+        "import time",
+
+        "import json",
+
+        "import os",
+
+        "from datetime import datetime, timedelta",
+
+        "from operator import itemgetter",
+
+        "from streamlit_autorefresh import st_autorefresh",
+
+        "",
+
+        f"BASTAO_EMOJI = '{emoji}'",
+
+        f"CONSULTORES = {consultores}",
+
+        f"WEBHOOK_RELATORIO = '{webhook_relatorio}'", 
+
+        f"WEBHOOK_BASTAO = '{webhook_bastao}'",
+
+        f"APP_URL = '{public_url}'",
+
+        "TIMER_RERUN_S = 30",
+
+        "LOG_FILE = 'status_log.json'",
+
+        "STATE_FILE = 'app_state.json'",
+
+        "YOUTUBE_ID = 'yW0D5iK0i_A'",
+
+        "START_TIME_S = 10",
+
+        "PLAYBACK_TIME_MS = 10000",
+
+        "STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']",
+
+        "STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']",
+
+        "GIF_URL = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'",
+
+        "",
+
+        "# --- Funções de Persistência de Estado ---",
+
+        "",
+
+        "def date_serializer(obj):",
+
+        "    if isinstance(obj, datetime):",
+
+        "        return obj.isoformat()",
+
+        "    return str(obj)",
+
+        "",
+
+        "def save_state():",
+
+        "    state_to_save = {",
+
+        "        'status_texto': st.session_state.status_texto,",
+
+        "        'bastao_queue': st.session_state.bastao_queue,",
+
+        "        'bastao_start_time': st.session_state.bastao_start_time,",
+
+        "        'current_status_starts': st.session_state.current_status_starts,",
+
+        "        'report_last_run_date': st.session_state.report_last_run_date,",
+
+        "        'bastao_counts': st.session_state.bastao_counts,",
+
+        "        'priority_return_queue': st.session_state.priority_return_queue,",
+
+        "        'skip_status_display': st.session_state.skip_status_display,",
+
+        "        'skipped_consultors': st.session_state.skipped_consultors,",
+
+        "        'cycle_start_marker': st.session_state.cycle_start_marker,",
+
+        "    }",
+
+        "    try:",
+
+        "        with open(STATE_FILE, 'w') as f:",
+
+        "            json.dump(state_to_save, f, indent=4, default=date_serializer)",
+
+        "    except Exception as e:",
+
+        "        print(f'Erro ao salvar estado: {e}')",
+
+        "",
+
+        "def load_state():",
+
+        "    if os.path.exists(STATE_FILE):",
+
+        "        try:",
+
+        "            with open(STATE_FILE, 'r') as f:",
+
+        "                data = json.load(f)",
+
+        "            ",
+
+        "            for key in ['bastao_start_time', 'report_last_run_date']:",
+
+        "                if data.get(key):",
+
+        "                    data[key] = datetime.fromisoformat(data[key])",
+
+        "            for consultor, time_str in data['current_status_starts'].items():",
+
+        "                data['current_status_starts'][consultor] = datetime.fromisoformat(time_str)",
+
+        "            ",
+
+        "            return data",
+
+        "        except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:",
+
+        "            print(f'Erro ao carregar estado: {e}. Iniciando estado padrão.')",
+
+        "            return {}",
+
+        "    return {}",
+
+        "",
+
+        "# --- Funções de Log e Notificação ---",
+
+        "",
+
+        "def send_chat_notification_internal(consultor, status):",
+
+        "    if WEBHOOK_BASTAO and status == 'Bastão':",
+
+        '        message_template = "🎉 **BASTÃO GIRADO!** 🎉 \\n\\n- **Novo Responsável:** {consultor}\\n- **Acesse o Painel:** https://controle-bastao-eproc.streamlit.app/" ',
+
+        '        message_text = message_template.format(consultor=consultor, app_url=APP_URL)',
+
+        '        chat_message = {"text": message_text}',
+
+        '        try:',
+
+        '            response = requests.post(WEBHOOK_BASTAO, json=chat_message)',
+
+        '            response.raise_for_status()',
+
+        '            return True',
+
+        '        except requests.exceptions.RequestException as e: ',
+
+        '            print("="*60)',
+
+        '            print(f"❌ ERRO GRAVE: FALHA AO ENVIAR NOTIFICAÇÃO DE BASTÃO.")',
+
+        '            print(f"URL USADA: {WEBHOOK_BASTAO}")',
+
+        '            print(f"ERRO: {e}")',
+
+        '            if e.response is not None:',
+
+        '                print(f"STATUS CODE: {e.response.status_code}")',
+
+        '                print(f"RESPOSTA DO SERVIDOR: {e.response.text}")',
+
+        '            print("="*60)',
+
+        '            return False',
+
+        '    return False',
+
+        "",
+
+        "def play_sound_html():",
+
+        '    return """',
+
+        '<audio autoplay="true">',
+
+        '        <source src="https.www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mp3">',
+
+        '</audio>',
+
+        '"""',
+
+        "",
+
+        "def load_logs():",
+
+        "    try:",
+
+        "        with open(LOG_FILE, 'r') as f:",
+
+        "            return json.load(f)",
+
+        "    except (FileNotFoundError, json.JSONDecodeError):",
+
+        "        return []",
+
+        "def save_logs(logs):\n",
+
+        "    with open(LOG_FILE, 'w') as f: json.dump(logs, f, indent=4, default=date_serializer)",
+
+        "def log_status_change(consultor, old_status, new_status, duration):",
+
+        "    logs = load_logs()",
+
+        "    log_entry = {",
+
+        "        'consultor': consultor,",
+
+        "        'old_status': old_status if old_status != '' else 'Disponível',",
+
+        "        'new_status': new_status if new_status != '' else 'Disponível',",
+
+        "        'duration_s': duration.total_seconds(),",
+
+        "        'start_time': datetime.now().isoformat(),",
+
+        "        'end_time': datetime.now().isoformat()",
+
+        "    }",
+
+        "    logs.append(log_entry)",
+
+        "    save_logs(logs)",
+
+        "    st.session_state['current_status_starts'][consultor] = datetime.now()",
+
+        "    save_state()",
+
+        "",
+
+        "def format_time_duration(duration):",
+
+        "    total_seconds = int(duration.total_seconds())",
+
+        "    hours = total_seconds // 3600",
+
+        "    minutes = (total_seconds % 3600) // 60",
+
+        "    seconds = total_seconds % 60",
+
+        "    return f'{hours:02}:{minutes:02}:{seconds:02}'",
+
+        "",
+
+        "def send_daily_report():",
+
+        "    logs = load_logs()",
+
+        "    today_str = datetime.now().date().isoformat()",
+
+        "    report_data = [log for log in logs if log['start_time'].startswith(today_str)]",
+
+        "    ",
+
+        "    if not report_data or not WEBHOOK_RELATORIO:",
+
+        "        st.session_state['report_last_run_date'] = datetime.now()",
+
+        "        save_state()",
+
+        "        return",
+
+        "    ",
+
+        "    TRACKED_STATUSES = ['Bastão', 'Atividade', 'Almoço', 'Saída Temporária', 'Disponível', 'Pulou Turno (Assumido)']",
+
+        "    summary = {",
+
+        "        consultor: {status: {'count': 0, 'duration_s': 0} for status in TRACKED_STATUSES}",
+
+        "        for consultor in CONSULTORES",
+
+        "    }",
+
+        "    ",
+
+        "    for log in report_data:",
+
+        "        consultor = log['consultor']",
+
+        "        status_to_track = log['old_status']",
+
+        "        if log['new_status'] == 'Pulou Turno (Assumido)':",
+
+        "            status_to_track = log['new_status']",
+
+        "            ",
+
+        "        duration = log['duration_s']",
+
+        "        ",
+
+        "        if consultor in summary and status_to_track in TRACKED_STATUSES:",
+
+        "            summary[consultor][status_to_track]['duration_s'] += duration",
+
+        "            summary[consultor][status_to_track]['count'] += 1",
+
+        "    ",
+
+        "    report_text = ''",
+
+        "    total_movimentacoes = len(report_data)",
+
+        "",
+
+        "    report_text += f'📊 **RELATÓRIO DIÁRIO DE BASTÃO - {today_str}**\\n'",
+
+        "    report_text += f'**Total de Movimentações:** {total_movimentacoes}\\n\\n'",
+
+        "",
+
+        "    bastao_ranking = sorted(",
+
+        "        CONSULTORES,",
+
+        "        key=lambda c: summary.get(c, {}).get('Bastão', {}).get('duration_s', 0),",
+
+        "        reverse=True",
+
+        "    )",
+
+        "    ",
+
+        "    for consultor in bastao_ranking:",
+
+        "        report_text += f'**--- {consultor} ---**\\n'",
+
+        "        consultor_summary = summary.get(consultor, {})",
+
+        "        ",
+
+        "        for status in TRACKED_STATUSES:",
+
+        "            data = consultor_summary.get(status, {'count': 0, 'duration_s': 0})",
+
+        "            if data['count'] > 0:",
+
+        "                duration_td = timedelta(seconds=data['duration_s'])",
+
+        "                duration_str = format_time_duration(duration_td)",
+
+        "                report_text += f'- *{status.replace(' (Assumido)', '')}*: {data['count']}x ({duration_str})\\n'",
+
+        "        ",
+
+        "        report_text += '\\n'",
+
+        "",
+
+        "    chat_message = {",
+
+        "        'text': report_text,",
+
+        "        'cards': [",
+
+        "            {",
+
+        "                'header': {",
+
+        "                    'title': f'{BASTAO_EMOJI} Relatório Diário do Bastão - {today_str}',",
+
+        "                    'subtitle': 'Tempo e Contagem por Status',",
+
+        "                    'imageUrl': 'https.upload.wikimedia.org/wikipedia/commons/thumb/1/11/Blue_and_white_graph.svg/1024px-Blue_and_white_graph.svg.png'",
+
+        "                },",
+
+        "                'sections': [",
+
+        "                    {",
+
+        "                        'widgets': [",
+
+        "                            {",
+
+        "                                'textParagraph': {'text': report_text.replace('\\n', '<br>')}",
+
+        "                            }",
+
+        "                        ]",
+
+        "                    }",
+
+        "                ]",
+
+        "            }",
+
+        "        ]",
+
+        "    }",
+
+        "    ",
+
+        "    try:",
+
+        "        response = requests.post(WEBHOOK_RELATORIO, json=chat_message)",
+
+        "        response.raise_for_status()",
+
+        "        st.session_state['report_last_run_date'] = datetime.now()",
+
+        "        save_state()",
+
+        "    except requests.exceptions.RequestException as e: ",
+
+        "        print('='*60)",
+
+        "        print(f'❌ ERRO GRAVE: FALHA AO ENVIAR RELATÓRIO DIÁRIO.')",
+
+        "        print(f'URL USADA: {WEBHOOK_RELATORIO}')",
+
+        "        print(f'ERRO: {e}')",
+
+        "        if e.response is not None:",
+
+        "            print(f'STATUS CODE: {e.response.status_code}')",
+
+        "            print(f'RESPOSTA DO SERVIDOR: {e.response.text}')",
+
+        "        print('='*60)",
+
+        "        ",
+
+        "    st.rerun()",
+
+        "",
+
+        "# --- Inicialização do Session State ---",
+
+        "",
+
+        "def init_session_state():",
+
+        "    persisted_state = load_state()",
+
+        "    ",
+
+        "    default_datetime = datetime.now()",
+
+        "    default_date_min = datetime.min",
+
+        "    ",
+
+        "    st.session_state['status_texto'] = persisted_state.get('status_texto', {nome: '' for nome in CONSULTORES})",
+
+        "    st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', [])",
+
+        "    st.session_state['bastao_start_time'] = persisted_state.get('bastao_start_time', None)",
+
+        "    st.session_state['current_status_starts'] = persisted_state.get('current_status_starts', {nome: default_datetime for nome in CONSULTORES})",
+
+        "    st.session_state['report_last_run_date'] = persisted_state.get('report_last_run_date', default_date_min)",
+
+        "    st.session_state['bastao_counts'] = persisted_state.get('bastao_counts', {nome: 0 for nome in CONSULTORES})",
+
+        "    st.session_state['priority_return_queue'] = persisted_state.get('priority_return_queue', [])",
+
+        "    st.session_state['skip_status_display'] = persisted_state.get('skip_status_display', {nome: False for nome in CONSULTORES})",
+
+        "    st.session_state['skipped_consultors'] = persisted_state.get('skipped_consultors', [])",
+
+        "    st.session_state['cycle_start_marker'] = persisted_state.get('cycle_start_marker', None)",
+
+        "    ",
+
+        "    for nome in CONSULTORES:",
+
+        "        checkbox_key = f'check_{nome}'",
+
+        "        if checkbox_key not in st.session_state:",
+
+        "            st.session_state[checkbox_key] = nome in persisted_state.get('bastao_queue', []) or nome in st.session_state['skipped_consultors']",
+
+        "    \n",
+
+        "    if not os.path.exists(STATE_FILE):",
+
+        "        save_state()",
+
+        "",
+
+        "# --- Lógica Principal ---",
+
+        "",
+
+        "def manual_rerun():", 
+
+        "    st.session_state['gif_warning'] = False ", 
+
+        "    st.rerun()", 
+
+        "    ",
+
+        "def check_and_assume_baton(consultor=None):\n",
+
+        "    current_responsavel = st.session_state['bastao_queue'][0] if st.session_state['bastao_queue'] else ''\n",
+
+        "    \n",
+
+        "    if current_responsavel and st.session_state['status_texto'].get(current_responsavel) == 'Bastão':\n",
+
+        "        return\n",
+
+        "    \n",
+
+        "    for index, nome in enumerate(st.session_state['bastao_queue']):",
+
+        "        current_status = st.session_state['status_texto'].get(nome, '')\n",
+
+        "        \n",
+
+        "        if nome in st.session_state['skipped_consultors']:\n",
+
+        "            continue \n", ### ⬅️ CORRIGIDO (Indentação de 13 para 12 espaços)
+
+        "        \n",
+
+        "        if current_status == '' and nome not in st.session_state['skipped_consultors']:\n",
+
+        "            novo_responsavel = nome\n",
+
+        "            \n",
+
+        "            for c in CONSULTORES:\n",
+
+        "                if st.session_state['status_texto'].get(c) == 'Bastão':\n",
+
+        "                    st.session_state['status_texto'][c] = ''\n",
+
+        "                    \n",
+
+        "            novo_responsavel = nome\n",
+
+        "            st.session_state['status_texto'][novo_responsavel] = 'Bastão'\n",
+
+        "            st.session_state['bastao_start_time'] = datetime.now()\n",
+
+        "            st.session_state['current_status_starts'][novo_responsavel] = datetime.now()\n",
+
+        "            st.session_state['play_sound'] = True\n",
+
+        "            st.session_state['gif_warning'] = False \n",
+
+        "            st.session_state['skip_status_display'][novo_responsavel] = False \n",
+
+        "            send_chat_notification_internal(novo_responsavel, 'Bastão')\n",
+
+        "            save_state()\n",
+
+        "            st.rerun()\n",
+
+        "            return\n",
+
+        "    \n",
+
+        "    if current_responsavel and st.session_state['status_texto'].get(current_responsavel) in STATUSES_DE_SAIDA:\n",
+
+        "        st.session_state['status_texto'][current_responsavel] = ''\n",
+
+        "        st.session_state['bastao_start_time'] = None\n",
+
+        "        save_state()\n",
+
+        "        st.rerun()\n",
+
+        "    \n",
+
+        "def update_queue(consultor):\n",
+
+        "    st.session_state['gif_warning'] = False \n",
+
+        "    checkbox_key = f'check_{consultor}'\n",
+
+        "    is_checked = st.session_state.get(checkbox_key, False)\n",
+
+        "    old_status = st.session_state['status_texto'].get(consultor, '') or 'Disponível'\n",
+
+        "    \n",
+
+        "    if is_checked and consultor not in st.session_state['bastao_queue']:\n",
+
+        "        duration = datetime.now() - st.session_state['current_status_starts'][consultor]\n",
+
+        "        log_status_change(consultor, old_status, 'Disponível na Fila', duration)\n",
+
+        "        \n",
+
+        "        priority_queue = st.session_state.get('priority_return_queue', [])\n",
+
+        "        \n",
+
+        "        if consultor in st.session_state['skipped_consultors']:\n",
+
+        "            st.session_state['skipped_consultors'].remove(consultor)\n",
+
+        "            if not st.session_state['skipped_consultors']:\n",
+
+        "                st.session_state['cycle_start_marker'] = None\n",
+
+        "            \n",
+
+        "        if consultor in priority_queue:\n",
+
+        "            if st.session_state['bastao_queue']:\n",
+
+        "                st.session_state['bastao_queue'].insert(1, consultor)\n",
+
+        "            else:\n",
+
+        "                st.session_state['bastao_queue'].append(consultor)\n",
+
+        "            priority_queue.remove(consultor)\n",
+
+        "        else:\n",
+
+        "            st.session_state['bastao_queue'].append(consultor)\n",
+
+        "            \n",
+
+        "        st.session_state['status_texto'][consultor] = ''\n",
+
+        "        st.session_state['skip_status_display'][consultor] = False \n",
+
+        "        check_and_assume_baton(consultor)\n",
+
+        "    elif not is_checked and consultor in st.session_state['bastao_queue']:\n",
+
+        "        duration = datetime.now() - st.session_state['current_status_starts'][consultor]\n",
+
+        "        log_status_change(consult
 
 
 CONSULTORES = [
