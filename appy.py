@@ -1,5 +1,37 @@
+import streamlit as st
+import pandas as pd
+import requests
+import time
+import json
+import os
+from datetime import datetime, timedelta
+from operator import itemgetter
+from streamlit_autorefresh import st_autorefresh
+
+# --- 1. Definições Globais ---
+GOOGLE_CHAT_WEBHOOK_RELATORIO = ""
+CHAT_WEBHOOK_BASTAO = ""
+BASTAO_EMOJI = "🌸"
+APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
+# CONSULTORES is now defined INSIDE the generated code
+LOG_FILE = 'status_log.json'
+STATE_FILE = 'app_state.json'
+STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
+STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']
+GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
+GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
+SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
+
 # --- 2. Função Geradora do Código ---
-def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, public_url):
+# REMOVED 'consultores' parameter
+def generate_app_code(emoji, webhook_relatorio, webhook_bastao, public_url):
+    # DEFINE CONSULTORES INSIDE THE STRING TO BE EXECUTED
+    consultores_list_str = str(sorted([
+        "Barbara", "Bruno", "Claudia", "Douglas", "Fábio", "Glayce", "Isac",
+        "Isabela", "Ivana", "Leonardo", "Morôni", "Michael", "Pablo", "Ranyer",
+        "Victoria"
+    ]))
+
     app_code_lines = [
         "import streamlit as st",
         "import pandas as pd",
@@ -11,8 +43,11 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "from operator import itemgetter",
         "from streamlit_autorefresh import st_autorefresh",
         "",
+        # --- DEFINITION ADDED HERE ---
+        f"CONSULTORES = {consultores_list_str}",
+        # --- END DEFINITION ---
+        "",
         f"BASTAO_EMOJI = '{emoji}'",
-        f"CONSULTORES = {consultores}",
         f"WEBHOOK_RELATORIO = '{webhook_relatorio}'",
         f"WEBHOOK_BASTAO = '{webhook_bastao}'",
         f"APP_URL = '{public_url}'",
@@ -24,7 +59,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         f"GIF_URL_ROTATION = '{GIF_URL_ROTATION}'",
         f"SOUND_URL = '{SOUND_URL}'",
         "",
-        "# --- Funções de Persistência ---",
+        # --- Funções de Persistência ---
         "def date_serializer(obj):",
         "    if isinstance(obj, datetime): return obj.isoformat()",
         "    return str(obj)",
@@ -81,7 +116,11 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "def log_status_change(consultor, old_status, new_status, duration):",
         "    print(f'LOG: {consultor} de \"{old_status or '-'}\" para \"{new_status or '-'}\" após {duration}')",
         "    if not isinstance(duration, timedelta): duration = timedelta(0)",
-        "    st.session_state.current_status_starts[consultor] = datetime.now()",
+        "    # Ensure consultor key exists before updating",
+        "    if consultor not in st.session_state.current_status_starts:",
+        "        st.session_state.current_status_starts[consultor] = datetime.now() # Initialize if missing",
+        "    else:",
+        "        st.session_state.current_status_starts[consultor] = datetime.now()", # Update time
         "",
         "def format_time_duration(duration):",
         "    if not isinstance(duration, timedelta): return '--:--:--'",
@@ -121,8 +160,8 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        is_active = nome in active_people or bool(st.session_state.status_texto.get(nome))",
         "        st.session_state.setdefault(f'check_{nome}', is_active)",
         "",
-        "    if not st.session_state.initial_cycle_members:",
-        "         print('!!! Iniciando ciclo na carga !!!')",
+        "    if not st.session_state.initial_cycle_members and any(st.session_state.get(f'check_{c}') for c in CONSULTORES):", # Trigger only if needed and someone is available
+        "         print('!!! Iniciando ciclo na carga / refresh !!!')",
         "         st.session_state.bastao_queue = [c for c in st.session_state.master_order if st.session_state.get(f'check_{c}')]",
         "         for c in CONSULTORES:",
         "              if st.session_state.get(f'check_{c}') and c not in st.session_state.bastao_queue:",
@@ -213,7 +252,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    print(f'... Fila Ativa: {st.session_state.bastao_queue}, Master: {st.session_state.master_order}, Completed: {st.session_state.completed_this_cycle}, Initial: {st.session_state.initial_cycle_members}')",
         "    reset = check_cycle_reset()",
         "    baton = check_and_assume_baton()",
-        "    if not baton: save_state()", # Save state if baton logic didn't already
+        "    if not baton: save_state()",
         "    st.rerun()",
         "",
         "def finish_turn_action():",
@@ -292,12 +331,12 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "# Garantir Assunção Inicial/Pós-Reset",
         "holder_exists = any(s == 'Bastão' for s in st.session_state.status_texto.values())",
-        "eligible_exists = any(c not in st.session_state.completed_this_cycle for c in st.session_state.bastao_queue)",
+        "eligible_exists = any(c not in st.session_state.completed_this_cycle for c in st.session_state.bastao_queue if st.session_state.get(f'check_{c}'))", # Check eligibility correctly
         "if not holder_exists and st.session_state.bastao_queue and eligible_exists:",
         "    print('!!! FORÇANDO CHECK ASSUME BATON NO RENDER !!!')",
         "    if check_and_assume_baton():",
         "        print('--> Baton foi reassumido, rerunning...')",
-        "        st.rerun()", # Rerun immediately",
+        "        st.rerun()",
         "",
         "# Layout",
         'col_principal, col_disponibilidade = st.columns([1.5, 1])',
@@ -306,7 +345,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "completed = st.session_state.completed_this_cycle",
         "responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)",
         "proximo = next((c for c in active_queue if c not in completed and st.session_state.get(f'check_{c}')), None)",
-        "proximo_index = active_queue.index(proximo) if proximo in active_queue else -1",
+        "proximo_index = active_queue.index(proximo) if proximo and proximo in active_queue else -1", # Check if proximo exists
         "restante = [c for i, c in enumerate(active_queue) if i > proximo_index and c not in completed and st.session_state.get(f'check_{c}')] if proximo_index != -1 else []",
         "",
         "with col_principal:",
@@ -325,7 +364,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "    if proximo: st.markdown(f'### 1º: **{proximo}**')",
         "    if restante: st.markdown(f'#### 2º em diante: {', '.join(restante)}')",
         "    if not proximo:",
-        "        if responsavel: st.markdown('*Apenas o responsável na fila ativa.*')",
+        "        if responsavel: st.markdown('*Apenas o responsável atual é elegível.*')", # Adjusted message
         "        else: st.markdown('*Ninguém elegível na fila ativa.*')",
         "    if completed:",
         "        st.markdown(f'<br><span style=\"color:grey;\">✔️ Turno Concluído:</span> {', '.join(sorted(list(completed)))}', unsafe_allow_html=True)",
@@ -365,8 +404,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "        for nome in combined_fila_render_order:",
         "            col_nome, col_check = st.columns([0.8, 0.2])",
         "            key = f'check_{nome}'",
-        "            # Use on_change for checkboxes, onClick caused issues previously",
-        "            col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')",
+        "            col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')", # Use on_change",
         "            if nome == responsavel:",
         "                display = f'<span style=\"background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;\">🔥 {nome}</span>'",
         "            elif nome in completed:",
@@ -384,8 +422,7 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "            for nome in sorted(names):",
         "                col_nome, col_check = st.columns([0.8, 0.2])",
         "                key = f'check_{nome}'",
-        "                # Use on_change for checkboxes",
-        "                col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')",
+        "                col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')", # Use on_change",
         "                col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)",
         "        st.markdown('---')",
         "    render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')",
@@ -397,15 +434,13 @@ def generate_app_code(consultores, emoji, webhook_relatorio, webhook_bastao, pub
         "",
         "print('--- FIM DO RENDER ---')",
     ]
-    # Remove leading/trailing whitespace and ensure final newline
-    clean_code = "\n".join(line.strip() for line in app_code_lines if line.strip()) + "\n"
-    return clean_code
+    return "\\n".join(line for line in app_code_lines if line.strip()) + "\\n"
 
 # ============================================
 # 5. EXECUÇÃO FINAL
 # ============================================
 app_code_to_exec = generate_app_code(
-    CONSULTORES, BASTAO_EMOJI, GOOGLE_CHAT_WEBHOOK_RELATORIO, CHAT_WEBHOOK_BASTAO, APP_URL_CLOUD
+    # CONSULTORES is defined inside the string now
+    BASTAO_EMOJI, GOOGLE_CHAT_WEBHOOK_RELATORIO, CHAT_WEBHOOK_BASTAO, APP_URL_CLOUD
 )
-# Execute the generated code string
 exec(app_code_to_exec)
