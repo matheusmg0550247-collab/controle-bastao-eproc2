@@ -17,7 +17,7 @@ CHAT_WEBHOOK_BASTAO = ""
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 CONSULTORES = sorted([
-    "Barbara", "Bruno", "Claudia", "Douglas", "Fábio", "Glayce", "Isac",
+    "Barbára", "Bruno", "Cláudia", "Douglas", "Fábio", "Glayce", "Isac",
     "Isabela", "Ivana", "Leonardo", "Morôni", "Michael", "Pablo", "Ranyer",
     "Victoria"
 ])
@@ -78,7 +78,6 @@ def load_state():
         data.setdefault('bastao_counts', {})
         data.setdefault('priority_return_queue', [])
         data.setdefault('skip_flags', {})
-        # Remove flags for consultants no longer present
         data['skip_flags'] = {c: v for c, v in data.get('skip_flags', {}).items() if c in CONSULTORES}
         return data
     except Exception as e: print(f'Erro ao carregar estado: {e}. Resetando.'); return {}
@@ -91,7 +90,10 @@ def save_logs(l): pass
 def log_status_change(consultor, old_status, new_status, duration):
     print(f'LOG: {consultor} de "{old_status or '-'}" para "{new_status or '-'}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
-    st.session_state.current_status_starts[consultor] = datetime.now()
+    if consultor not in st.session_state.current_status_starts:
+        st.session_state.current_status_starts[consultor] = datetime.now()
+    else:
+        st.session_state.current_status_starts[consultor] = datetime.now()
 
 def format_time_duration(duration):
     if not isinstance(duration, timedelta): return '--:--:--'
@@ -111,7 +113,6 @@ def init_session_state():
     }
     for key, default in defaults.items():
         st.session_state.setdefault(key, persisted_state.get(key, default))
-        # Type safety
         if key == 'bastao_queue' and not isinstance(st.session_state.bastao_queue, list): st.session_state.bastao_queue = []
         if key == 'skip_flags' and not isinstance(st.session_state.skip_flags, dict): st.session_state.skip_flags = {}
 
@@ -129,10 +130,10 @@ def init_session_state():
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
     if not st.session_state.bastao_queue and checked_on:
         print('!!! Fila vazia na carga, reconstruindo !!!')
-        master_order_from_state = persisted_state.get('master_order', []) # Try to use previous order if saved (though we removed saving it)
+        master_order_from_state = persisted_state.get('master_order', [])
         master_order_from_state = [c for c in master_order_from_state if c in CONSULTORES]
         st.session_state.bastao_queue = [c for c in master_order_from_state if c in checked_on]
-        for c in checked_on: # Add any missing checked consultants
+        for c in checked_on:
             if c not in st.session_state.bastao_queue:
                 st.session_state.bastao_queue.append(c)
 
@@ -143,50 +144,38 @@ def find_next_holder_index(current_index, queue, skips):
     if not queue: return -1
     num_consultores = len(queue)
     if num_consultores == 0: return -1
-    # Ensure current_index is valid or default to -1 (start from beginning)
-    if current_index < 0 or current_index >= num_consultores: current_index = -1
+    if current_index >= num_consultores or current_index < -1: current_index = -1
 
     next_idx = (current_index + 1) % num_consultores
     attempts = 0
     while attempts < num_consultores:
         consultor = queue[next_idx]
-        # Eligible if checkbox is ON and skip flag is FALSE
         if not skips.get(consultor, False) and st.session_state.get(f'check_{consultor}'):
-            return next_idx # Found the next valid one
+            return next_idx
         next_idx = (next_idx + 1) % num_consultores
         attempts += 1
     print("AVISO: find_next_holder_index não encontrou ninguém elegível.")
-    return -1 # Didn't find anyone
-
+    return -1
 
 def check_and_assume_baton():
     print('--- VERIFICA E ASSUME BASTÃO ---')
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
     current_holder_status = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
-
-    # 1. Is current holder still valid? (In queue, checked ON)
     is_current_valid = (current_holder_status
                       and current_holder_status in queue
                       and st.session_state.get(f'check_{current_holder_status}'))
 
-    # 2. Find the first eligible person starting from index 0
-    first_eligible_index = find_next_holder_index(-1, queue, skips) # Search from beginning
+    first_eligible_index = find_next_holder_index(-1, queue, skips)
     first_eligible_holder = queue[first_eligible_index] if first_eligible_index != -1 else None
 
-    print(f'Fila: {queue}, Skips: {skips}, Primeiro Elegível: {first_eligible_holder}, Portador Atual (Status): {current_holder_status}, Atual é Válido?: {is_current_valid}')
+    print(f'Fila: {queue}, Skips: {skips}, Próximo Elegível: {first_eligible_holder}, Portador Atual (Status): {current_holder_status}, Atual é Válido?: {is_current_valid}')
 
-    # 3. Determine who *should* have the baton now
     should_have_baton = None
-    if is_current_valid:
-        should_have_baton = current_holder_status # Keep current if valid
-    elif first_eligible_holder:
-        should_have_baton = first_eligible_holder # Assign to first eligible if current is invalid
-    # Else: No one is eligible, should_have_baton remains None
+    if is_current_valid: should_have_baton = current_holder_status
+    elif first_eligible_holder: should_have_baton = first_eligible_holder
 
-    # 4. Update statuses if needed
     changed = False
-    # Clear baton from anyone who shouldn't have it
     for c in CONSULTORES:
         if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
             print(f'Limpando bastão de {c} (não deveria ter)')
@@ -195,7 +184,6 @@ def check_and_assume_baton():
             st.session_state.status_texto[c] = ''
             changed = True
 
-    # Assign baton if someone should have it and doesn't
     if should_have_baton and st.session_state.status_texto.get(should_have_baton) != 'Bastão':
         print(f'Atribuindo bastão para {should_have_baton}')
         old_status = st.session_state.status_texto.get(should_have_baton, '')
@@ -203,21 +191,19 @@ def check_and_assume_baton():
         log_status_change(should_have_baton, old_status, 'Bastão', duration)
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        if current_holder_status != should_have_baton: st.session_state.play_sound = True # Play sound on change
-        # Consume skip flag upon assuming baton
+        if current_holder_status != should_have_baton: st.session_state.play_sound = True
         if st.session_state.skip_flags.get(should_have_baton):
              print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
              st.session_state.skip_flags[should_have_baton] = False
         changed = True
-    # Ensure start time is None if no one has the baton
     elif not should_have_baton:
-         if current_holder_status: # If someone had it, clear them
+         if current_holder_status:
               print(f'Ninguém elegível, limpando bastão de {current_holder_status}')
               duration = datetime.now() - st.session_state.current_status_starts.get(current_holder_status, datetime.now())
               log_status_change(current_holder_status, 'Bastão', '', duration)
               st.session_state.status_texto[current_holder_status] = ''
               changed = True
-         if st.session_state.bastao_start_time is not None: changed = True # Ensure time is cleared
+         if st.session_state.bastao_start_time is not None: changed = True
          st.session_state.bastao_start_time = None
 
     if changed: print('Estado do bastão mudou.'); save_state()
@@ -235,28 +221,27 @@ def update_queue(consultor):
     was_holder_before = consultor == next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     duration = datetime.now() - st.session_state.current_status_starts.get(consultor, datetime.now())
 
-    if is_checked: # Becoming available
+    if is_checked:
         log_status_change(consultor, old_status_text or 'Indisponível', '', duration)
         st.session_state.status_texto[consultor] = ''
         if consultor not in st.session_state.bastao_queue:
-            st.session_state.bastao_queue.append(consultor) # Add to end
+            st.session_state.bastao_queue.append(consultor)
             print(f'Adicionado {consultor} ao fim da fila.')
-        st.session_state.skip_flags[consultor] = False # Ensure not skipped
-    else: # Becoming unavailable
+        st.session_state.skip_flags[consultor] = False
+    else:
         log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
         log_status_change(consultor, log_old_status , 'Indisponível', duration)
         st.session_state.status_texto[consultor] = ''
         if consultor in st.session_state.bastao_queue:
             st.session_state.bastao_queue.remove(consultor)
             print(f'Removido {consultor} da fila.')
-        st.session_state.skip_flags.pop(consultor, None) # Remove flag
+        st.session_state.skip_flags.pop(consultor, None)
 
 
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = check_and_assume_baton()
-    if not baton_changed: save_state() # Save if check_assume didn't
+    if not baton_changed: save_state()
     st.rerun()
-
 
 def rotate_bastao(): # Action 'Passar'
     print('CALLBACK ROTATE BASTAO (PASSAR)')
@@ -266,7 +251,6 @@ def rotate_bastao(): # Action 'Passar'
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
-    # Allow rotate only if selected IS the current holder
     if selected != current_holder: st.session_state.gif_warning = True; st.rerun(); return
 
     current_index = -1
@@ -274,22 +258,22 @@ def rotate_bastao(): # Action 'Passar'
     except ValueError: print('ERRO: Portador não está na fila?'); return
 
     # --- RESET LOGIC ---
-    # Find the very first eligible person in the queue
     first_eligible_index_overall = find_next_holder_index(-1, queue, skips)
     if first_eligible_index_overall != -1:
         first_eligible_holder_overall = queue[first_eligible_index_overall]
-        # If the *next* holder after the current one IS the first eligible overall, we reset
         potential_next_index = find_next_holder_index(current_index, queue, skips)
-        if potential_next_index != -1 and queue[potential_next_index] == first_eligible_holder_overall:
+        # Reset if the next holder would be the first overall *and* the current holder is not the only one eligible
+        if potential_next_index != -1 and \
+           queue[potential_next_index] == first_eligible_holder_overall and \
+           current_index != potential_next_index: # Avoid reset if only one person eligible
             print("--- RESETANDO CICLO (Detectado ao passar para o primeiro elegível) ---")
-            st.session_state.skip_flags = {c: False for c in queue} # Clear all skip flags
-            skips = st.session_state.skip_flags # Update local variable
-            # Re-find next index AFTER clearing skips
-            next_index = find_next_holder_index(current_index, queue, skips)
+            st.session_state.skip_flags = {c: False for c in queue if st.session_state.get(f'check_{c}')} # Clear flags only for available
+            skips = st.session_state.skip_flags
+            next_index = find_next_holder_index(current_index, queue, skips) # Recalculate next index
         else:
-             next_index = potential_next_index # Use the originally found next index
+             next_index = potential_next_index
     else:
-        next_index = -1 # No one is eligible at all
+        next_index = -1 # No one eligible
     # --- END RESET LOGIC ---
 
 
@@ -302,8 +286,7 @@ def rotate_bastao(): # Action 'Passar'
         log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
         st.session_state.status_texto[next_holder] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        # Consume the skip flag for the next holder (might have been cleared by reset already, but safe to do again)
-        st.session_state.skip_flags[next_holder] = False
+        st.session_state.skip_flags[next_holder] = False # Consume flag
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
         st.session_state.play_sound = True
         st.session_state.rotation_gif_start_time = datetime.now()
@@ -311,17 +294,14 @@ def rotate_bastao(): # Action 'Passar'
     else:
         print('Não foi encontrado próximo elegível. Bastão permanece.')
         st.warning('Não há próximo consultor elegível na fila.')
-        # Don't save if nothing changed
 
     st.rerun()
-
 
 def toggle_skip(): # Action 'Pular'
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
-    # Allow marking anyone currently available (checkbox ON)
     if not st.session_state.get(f'check_{selected}'): st.warning(f'{selected} não está disponível para marcar/desmarcar.'); return
 
     current_skip_status = st.session_state.skip_flags.get(selected, False)
@@ -329,17 +309,15 @@ def toggle_skip(): # Action 'Pular'
     new_status_str = 'MARCADO para pular' if not current_skip_status else 'DESMARCADO para pular'
     print(f'{selected} foi {new_status_str}')
 
-    # If the current holder marks themselves to be skipped, immediately try to rotate
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
-        save_state() # Save the skip flag change first
-        rotate_bastao() # This function handles rerun and saving state changes from rotation
-        return # Avoid double rerun/save
+        save_state()
+        rotate_bastao() # Handles rerun
+        return
 
-    save_state() # Save the changed skip flag
+    save_state()
     st.rerun()
-
 
 def update_status(status_text, change_to_available): # Unavailable + Status
     print(f'CALLBACK UPDATE STATUS: {status_text}')
@@ -354,7 +332,6 @@ def update_status(status_text, change_to_available): # Unavailable + Status
     log_status_change(selected, old_status, status_text, duration)
     st.session_state.status_texto[selected] = status_text # Set the specific status
 
-    # Remove from queue and clear skip flag if they leave
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
     st.session_state.skip_flags.pop(selected, None)
 
@@ -368,7 +345,6 @@ def update_status(status_text, change_to_available): # Unavailable + Status
         baton_changed = check_and_assume_baton()
     if not baton_changed: save_state() # Save if check_assume didn't
     st.rerun()
-
 
 def manual_rerun():
     print('CALLBACK MANUAL RERUN')
@@ -412,14 +388,13 @@ if not holder_exists and st.session_state.bastao_queue and eligible_exists:
         st.session_state._assign_attempt = True
         if check_and_assume_baton():
             print('--> Bastão reassumido no render, marcando para rerun...')
-            rerun_needed = True # Mark for rerun *after* layout
+            rerun_needed = True
     else:
         print('AVISO: Segunda tentativa de assumir bastão no render evitada.')
 if '_assign_attempt' in st.session_state: del st.session_state['_assign_attempt']
 
 # Layout
 col_principal, col_disponibilidade = st.columns([1.5, 1])
-# Get fresh state values for rendering
 queue = st.session_state.bastao_queue
 skips = st.session_state.skip_flags
 responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
@@ -433,13 +408,13 @@ if proximo_index != -1:
     idx = start_check
     count = 0
     while count < num_q:
+        if idx == current_index or idx == proximo_index:
+            idx = (idx + 1) % num_q; count += 1
+            if idx == start_check: break; continue
         consultor = queue[idx]
-        # Include only if not current, not next, not skipped, and checked ON
-        if idx != current_index and idx != proximo_index and \
-           not skips.get(consultor, False) and st.session_state.get(f'check_{consultor}'):
+        if not skips.get(consultor, False) and st.session_state.get(f'check_{consultor}'):
             restante.append(consultor)
-        idx = (idx + 1) % num_q
-        count += 1
+        idx = (idx + 1) % num_q; count += 1
         if idx == start_check: break
 
 # --- Coluna Principal ---
@@ -462,22 +437,24 @@ with col_principal:
     if not proximo and not restante:
          if responsavel: st.markdown('*Apenas o responsável atual é elegível.*')
          else: st.markdown('*Ninguém elegível na fila.*')
-    elif not restante and proximo: st.markdown("&nbsp;") # Empty space if only 'proximo'
+    elif not restante and proximo: st.markdown("&nbsp;") # Empty space
 
-    # --- Seção para quem Pulou ---
+    # --- Seção Pular (AJUSTADA) ---
     skipped_consultants = [c for c, is_skipped in skips.items() if is_skipped and st.session_state.get(f'check_{c}')]
     if skipped_consultants:
          skipped_text = ', '.join(sorted(skipped_consultants))
-         grammar_plural = "pulou" if len(skipped_consultants) == 1 else "pularam"
-         grammar_return = "Irá retornar" if len(skipped_consultants) == 1 else "Irão retornar"
+         num_skipped = len(skipped_consultants)
+         titulo = 'Consultor Pulou:' if num_skipped == 1 else 'Consultores Pularam:'
+         verbo_pular = 'pulou' if num_skipped == 1 else 'pularam'
+         verbo_retornar = 'Irá retornar' if num_skipped == 1 else 'Irão retornar'
          st.markdown(f'''
          <div style="margin-top: 15px; padding: 10px; background-color: #FFF3CD; border-left: 5px solid #FFC107; border-radius: 5px;">
-             <span style="color: #856404; font-weight: bold;">Consultor{"es" if len(skipped_consultants) > 1 else ""} Pularam:</span><br>
-             {skipped_text} {grammar_plural} o bastão.<br>
-             {grammar_return} no próximo ciclo.
+             <span style="color: #856404; font-weight: bold;">{titulo}</span><br>
+             {skipped_text} {verbo_pular} o bastão!<br>
+             {verbo_retornar} no próximo ciclo!
          </div>
          ''', unsafe_allow_html=True)
-    # --- Fim da Seção Pular ---
+    # --- Fim Seção Pular ---
 
     st.markdown("###")
     st.header("**Consultor**")
@@ -515,7 +492,7 @@ with col_disponibilidade:
         for nome in render_order:
             col_nome, col_check = st.columns([0.8, 0.2])
             key = f'check_{nome}'
-            col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')
+            col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed') # on_change
             skip_flag = skips.get(nome, False)
             if nome == responsavel:
                 display = f'<span style="background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;">🔥 {nome}</span>'
@@ -533,7 +510,7 @@ with col_disponibilidade:
             for nome in sorted(names):
                 col_nome, col_check = st.columns([0.8, 0.2])
                 key = f'check_{nome}'
-                col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')
+                col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed') # on_change
                 col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)
         st.markdown('---')
     render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')
@@ -547,6 +524,6 @@ with col_disponibilidade:
 
 print('--- FIM DO RENDER ---')
 
-# Trigger rerun if baton was assigned during render check AFTER layout is drawn
+# Trigger rerun if needed after layout
 if rerun_needed:
     st.rerun()
