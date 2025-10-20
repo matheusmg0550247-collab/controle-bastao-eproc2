@@ -17,8 +17,8 @@ CHAT_WEBHOOK_BASTAO = ""
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 CONSULTORES = sorted([
-    "Barbara", "Bruno", "Claudia", "Douglas", "Fábio", "Glayce", "Isac",
-    "Isabela", "Ivana", "Leonardo", "Morôni", "Michael", "Pablo", "Ranyer",
+    "Barbára", "Bruno", "Cláudia", "Douglas", "Fábio", "Glayce", "Isac",
+    "Isabela", "Ivana", "Leonardo",  "Michael", "Morôni", "Pablo", "Ranyer",
     "Victoria"
 ])
 LOG_FILE = 'status_log.json'
