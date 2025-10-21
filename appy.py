@@ -12,16 +12,14 @@ from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
 
 # --- Constantes ---
-# --- ⬇️ MUDANÇA AQUI: Webhooks Reativados e Relatório Renomeado ---
-# GOOGLE_CHAT_WEBHOOK_RELATORIO renomeado para GOOGLE_CHAT_WEBHOOK_BACKUP
 GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
 # --- ⬆️ FIM DA MUDANÇA ---
 BASTAO_EMOJI = "🌸"
-APP_URL_CLOUD = https://controle-bastao-eproc.streamlit.app'
+APP_URL_CLOUD = 'Acesse o site do bastão'
 CONSULTORES = sorted([
-    "Barbara", "Bruno", "Claudia", "Douglas", "Fábio", "Glayce", "Isac",
-    "Isabela", "Ivana", "Leonardo", "Morôni", "Michael", "Pablo", "Ranyer",
+    "Bárbara", "Bruno", "Cláudia", "Douglas", "Fábio", "Glayce", "Isac",
+    "Isabela", "Ivana", "Leonardo", "Michael", "Morôni",  "Pablo", "Ranyer",
     "Victoria"
 ])
 LOG_FILE = 'status_log.json'
