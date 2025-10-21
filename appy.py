@@ -12,8 +12,11 @@ from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
 
 # --- Constantes ---
-GOOGLE_CHAT_WEBHOOK_RELATORIO = ""
-CHAT_WEBHOOK_BASTAO = ""
+# --- ⬇️ MUDANÇA AQUI: Webhooks Reativados e Relatório Renomeado ---
+# GOOGLE_CHAT_WEBHOOK_RELATORIO renomeado para GOOGLE_CHAT_WEBHOOK_BACKUP
+GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
+CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
+# --- ⬆️ FIM DA MUDANÇA ---
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 CONSULTORES = sorted([
@@ -50,7 +53,6 @@ def save_state():
         'rotation_gif_start_time': st.session_state.get('rotation_gif_start_time'),
     }
     try:
-        # Garante que datas sejam strings ISO para JSON
         state_to_save['current_status_starts'] = {k: v.isoformat() if isinstance(v, datetime) else str(v) for k, v in state_to_save['current_status_starts'].items()}
         for key in ['bastao_start_time', 'report_last_run_date', 'rotation_gif_start_time']:
              if isinstance(state_to_save.get(key), datetime):
@@ -84,17 +86,33 @@ def load_state():
         data['priority_return_queue'] = [c for c in data.get('priority_return_queue', []) if c in CONSULTORES]
         data['bastao_counts'] = {c: v for c, v in data.get('bastao_counts', {}).items() if c in CONSULTORES}
         data['status_texto'] = {c: v for c, v in data.get('status_texto', {}).items() if c in CONSULTORES}
-        data.setdefault('bastao_counts', {}) # Garante defaults
+        data.setdefault('bastao_counts', {})
         data.setdefault('priority_return_queue', [])
         data.setdefault('skip_flags', {})
         data.setdefault('status_texto', {})
         return data
     except Exception as e: print(f'Erro ao carregar estado: {e}. Resetando.'); return {}
 
-def send_chat_notification_internal(c, s): pass
+def send_chat_notification_internal(consultor, status):
+    # --- ⬇️ MUDANÇA AQUI: Usa CHAT_WEBHOOK_BASTAO ---
+    if CHAT_WEBHOOK_BASTAO and status == 'Bastão':
+        message_template = "🎉 **BASTÃO GIRADO!** 🎉 \\n\\n- **Novo Responsável:** {consultor}\\n- **Acesse o Painel:** {app_url}"
+        message_text = message_template.format(consultor=consultor, app_url=APP_URL_CLOUD) # Usa a URL global
+        chat_message = {"text": message_text}
+        try:
+            response = requests.post(CHAT_WEBHOOK_BASTAO, json=chat_message)
+            response.raise_for_status()
+            print(f"Notificação de bastão enviada para {consultor}")
+            return True
+        except requests.exceptions.RequestException as e:
+            print(f"Erro ao enviar notificação de bastão: {e}")
+            return False
+    return False
+    # --- ⬆️ FIM DA MUDANÇA ---
+
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
-def load_logs(): return []
-def save_logs(l): pass
+def load_logs(): return [] # Implementação omitida
+def save_logs(l): pass # Implementação omitida
 
 def log_status_change(consultor, old_status, new_status, duration):
     print(f'LOG: {consultor} de "{old_status or '-'}" para "{new_status or '-'}" após {duration}')
@@ -106,7 +124,39 @@ def format_time_duration(duration):
     s = int(duration.total_seconds()); h, s = divmod(s, 3600); m, s = divmod(s, 60)
     return f'{h:02}:{m:02}:{s:02}'
 
-def send_daily_report(): pass
+def send_daily_report(): # Nome da função mantido, mas usa webhook renomeado
+    # --- ⬇️ MUDANÇA AQUI: Usa GOOGLE_CHAT_WEBHOOK_BACKUP ---
+    print("Tentando enviar backup diário...")
+    logs = load_logs() # Carregaria os logs reais aqui
+    today_str = datetime.now().date().isoformat()
+    # Placeholder: Em um cenário real, você processaria os logs aqui
+    report_data = [{'consultor': 'Exemplo', 'old_status': 'Bastão', 'duration_s': 3600}] # Dados de exemplo
+    # report_data = [log for log in logs if log.get('start_time','').startswith(today_str)] # Filtragem real
+
+    if not report_data or not GOOGLE_CHAT_WEBHOOK_BACKUP:
+        print(f"Backup não enviado. Dados: {bool(report_data)}, Webhook: {bool(GOOGLE_CHAT_WEBHOOK_BACKUP)}")
+        st.session_state['report_last_run_date'] = datetime.now()
+        save_state()
+        return
+
+    # Placeholder: Construiria o report_text baseado nos report_data
+    report_text = f"📊 **Backup Diário de Status - {today_str}**\n\n(Detalhes do processamento de logs omitidos)"
+
+    chat_message = {'text': report_text}
+    print(f"Enviando backup para: {GOOGLE_CHAT_WEBHOOK_BACKUP}")
+    try:
+        response = requests.post(GOOGLE_CHAT_WEBHOOK_BACKUP, json=chat_message)
+        response.raise_for_status()
+        st.session_state['report_last_run_date'] = datetime.now()
+        print("Backup diário enviado com sucesso.")
+        save_state()
+    except requests.exceptions.RequestException as e:
+        print(f'Erro ao enviar backup diário: {e}')
+        if e.response is not None:
+             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
+    # st.rerun() # Remover rerun daqui para evitar loop se chamado no render
+    # --- ⬆️ FIM DA MUDANÇA ---
+
 
 def init_session_state():
     persisted_state = load_state()
@@ -147,7 +197,7 @@ def init_session_state():
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
     if not st.session_state.bastao_queue and checked_on:
         print('!!! Fila vazia na carga, reconstruindo !!!')
-        master_order_from_state = persisted_state.get('master_order', []) # Tenta usar ordem antiga se existir
+        master_order_from_state = persisted_state.get('master_order', [])
         master_order_from_state = [c for c in master_order_from_state if c in CONSULTORES]
         st.session_state.bastao_queue = [c for c in master_order_from_state if c in checked_on]
         for c in checked_on:
@@ -210,7 +260,7 @@ def check_and_assume_baton():
         log_status_change(should_have_baton, old_status, 'Bastão', duration)
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        if current_holder_status != should_have_baton: st.session_state.play_sound = True
+        if current_holder_status != should_have_baton: st.session_state.play_sound = True; send_chat_notification_internal(should_have_baton, 'Bastão') # Notifica
         if st.session_state.skip_flags.get(should_have_baton):
              print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
              st.session_state.skip_flags[should_have_baton] = False
@@ -259,6 +309,8 @@ def update_queue(consultor):
 
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = check_and_assume_baton()
+    # Save state if baton logic didn't already (e.g., just queue changed)
+    # Check_and_assume now saves state if changed, so save here ONLY if no baton change occurred.
     if not baton_changed:
         save_state()
     st.rerun()
@@ -272,6 +324,7 @@ def rotate_bastao(): # Action 'Passar'
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
+    # Allow rotate only if selected IS the current holder
     if selected != current_holder:
         st.session_state.gif_warning = True
         print(f'Aviso: {selected} tentou passar, mas {current_holder} tem o bastão.')
@@ -308,12 +361,15 @@ def rotate_bastao(): # Action 'Passar'
             st.session_state.skip_flags = new_skips
             skips = st.session_state.skip_flags # Atualiza a variável local
             reset_triggered = True
-            next_index = first_eligible_index_overall # After reset, next is the first eligible
+            # After reset, the next MUST be the first eligible overall
+            next_index = first_eligible_index_overall
             print(f'Flags limpas. Próximo índice recalculado para: {next_index} ({queue[next_index] if next_index != -1 else "Nenhum"})')
         else:
+             # No reset, use the normally calculated next index
              next_index = potential_next_index_no_reset
              print(f'Sem reset. Próximo índice: {next_index} ({queue[next_index] if next_index != -1 else "Nenhum"})')
     else:
+        # No one eligible in the entire queue
         print('Ninguém elegível na fila inteira.')
         next_index = -1
     # --- FIM LÓGICA DE RESET ---
@@ -328,7 +384,7 @@ def rotate_bastao(): # Action 'Passar'
         log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
         st.session_state.status_texto[next_holder] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        # Consome flag (seguro mesmo se reset já limpou)
+        # Consume flag (safe even if reset already cleared)
         st.session_state.skip_flags[next_holder] = False
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
         st.session_state.play_sound = True
@@ -337,6 +393,7 @@ def rotate_bastao(): # Action 'Passar'
     else:
         print('Não foi encontrado próximo elegível após verificação. Bastão permanece com {current_holder} (ou ninguém).')
         st.warning('Não há próximo consultor elegível na fila no momento.')
+        # Don't save state if nothing changed effectively
 
     st.rerun()
 
@@ -450,7 +507,6 @@ if '_assign_attempt' in st.session_state: del st.session_state['_assign_attempt'
 
 # Layout
 col_principal, col_disponibilidade = st.columns([1.5, 1])
-# Get fresh state values AFTER potential check_and_assume_baton
 queue = st.session_state.bastao_queue
 skips = st.session_state.skip_flags
 responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
@@ -484,23 +540,22 @@ with col_principal:
         except: pass
     col_time.markdown(f'#### 🕒 Tempo: **{format_time_duration(duration)}**')
     if responsavel:
-        # --- Alteração Visual: Tamanho 1.5em, negrito ---
-        st.markdown(f'<span style="font-size: 1.5em; font-weight: bold;">{responsavel}</span>', unsafe_allow_html=True)
-    else: st.markdown('<h2>(Ninguém com o bastão)</h2>', unsafe_allow_html=True) # Usando H2 para tamanho
+        # --- Alteração: Tamanho 2em ---
+        st.markdown(f'<span style="font-size: 2em; font-weight: bold;">{responsavel}</span>', unsafe_allow_html=True)
+    else: st.markdown('<h2>(Ninguém com o bastão)</h2>', unsafe_allow_html=True)
     st.markdown("###")
 
     st.header("Próximos da Fila")
     if proximo:
-        # --- Alteração Visual: Tamanho padrão (H3) ---
+        # --- Alteração: Tamanho padrão (H3) ---
         st.markdown(f'### 1º: **{proximo}**')
     if restante:
         st.markdown(f'#### 2º em diante: {", ".join(restante)}')
-    # Mensagens de fila vazia/fim de ciclo
     if not proximo and not restante:
          if responsavel: st.markdown('*Apenas o responsável atual é elegível.*')
-         elif queue and all(skips.get(c, False) or not st.session_state.get(f'check_{c}') for c in queue): st.markdown('*Todos disponíveis estão marcados para pular...*')
+         elif queue and all(skips.get(c, False) or not st.session_state.get(f'check_{c}') for c in queue) : st.markdown('*Todos disponíveis estão marcados para pular...*')
          else: st.markdown('*Ninguém elegível na fila.*')
-    elif not restante and proximo: st.markdown("&nbsp;") # Espaço se só tiver o próximo
+    elif not restante and proximo: st.markdown("&nbsp;")
 
 
     # --- Seção Pular (Estilo Ajustado) ---
@@ -508,7 +563,7 @@ with col_principal:
     if skipped_consultants:
          skipped_text = ', '.join(sorted(skipped_consultants))
          num_skipped = len(skipped_consultants)
-         # --- Alteração Visual: Título amarelo/negrito, resto preto/normal ---
+         # --- Alteração: Título amarelo/negrito, resto preto/normal ---
          titulo = '**Consultor Pulou:**' if num_skipped == 1 else '**Consultores Pularam:**'
          verbo_pular = 'pulou' if num_skipped == 1 else 'pularam'
          verbo_retornar = 'Irá retornar' if num_skipped == 1 else 'Irão retornar'
@@ -577,6 +632,7 @@ with col_disponibilidade:
                 col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')
                 col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)
         st.markdown('---')
+
     render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')
     render_section('Almoço', '🍽️', ui_lists['almoco'], 'blue')
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
