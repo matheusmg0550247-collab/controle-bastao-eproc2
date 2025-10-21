@@ -18,7 +18,7 @@ GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/
 CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
 # --- ⬆️ FIM DA MUDANÇA ---
 BASTAO_EMOJI = "🌸"
-APP_URL_CLOUD = 'https://controle-bastao-eproc.streamlit.app/'
+APP_URL_CLOUD = https://controle-bastao-eproc.streamlit.app'
 CONSULTORES = sorted([
     "Barbara", "Bruno", "Claudia", "Douglas", "Fábio", "Glayce", "Isac",
     "Isabela", "Ivana", "Leonardo", "Morôni", "Michael", "Pablo", "Ranyer",
