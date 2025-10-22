@@ -9,11 +9,14 @@ from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
 
 # --- FUNÇÃO DE CACHE GLOBAL ---
+# @st.cache_resource: Cria um objeto Python mutável (dicionário) que
+# é instanciado apenas uma vez e COMPARTILHADO entre TODAS as sessões/usuários.
 @st.cache_resource(show_spinner=False)
 def get_global_state_cache():
     """Inicializa e retorna o dicionário de estado GLOBAL compartilhado."""
     print("--- Inicializando o Cache de Estado GLOBAL (Executa Apenas 1x) ---")
     return {
+        # Status inicial agora é 'Indisponível'
         'status_texto': {nome: 'Indisponível' for nome in CONSULTORES},
         'bastao_queue': [],
         'skip_flags': {},
@@ -26,7 +29,7 @@ def get_global_state_cache():
     }
 
 # --- Constantes ---
-GOOGLE_CHAT_WEBHOOK_BACKUP = ""
+GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
@@ -273,7 +276,9 @@ def check_and_assume_baton():
         if st.session_state.bastao_start_time is not None: changed = True
         st.session_state.bastao_start_time = None
 
-    if changed: print('Estado do bastão mudou.'); save_state()
+    if changed: 
+        print('Estado do bastão mudou. Salvando GLOBAL.')
+        save_state()
     return changed
 
 # ============================================
@@ -338,7 +343,7 @@ def rotate_bastao():
         if check_and_assume_baton(): st.rerun()
         return
 
-    # --- LÓGICA DE RESET (CORRIGIDA) ---
+    # --- LÓGICA DE RESET ---
     reset_triggered = False
     
     # 1. Encontra o PRIMEIRO elegível na fila (índice -1 = início)
@@ -351,12 +356,14 @@ def rotate_bastao():
         first_eligible_holder_overall = queue[first_eligible_index_overall]
         potential_next_holder = queue[potential_next_index]
 
-        # Condição de Reset: O próximo é o PRIMEIRO elegível da fila (e não é o portador atual)
+        # Condição de Reset: O próximo APÓS o atual é o PRIMEIRO elegível da fila (ciclo completo)
         if potential_next_holder == first_eligible_holder_overall and current_holder != first_eligible_holder_overall:
             print("--- RESETANDO CICLO (Detectado ao passar para o primeiro elegível) ---")
             
             # Resetar as flags de pulo para todos os consultores ATIVOS (checados)
-            st.session_state.skip_flags = {c: False for c in CONSULTORES if st.session_state.get(f'check_{c}')}
+            # A flag deve ser resetada se ele estiver marcado como disponível (check_{c} == True)
+            new_skips = {c: False for c in CONSULTORES if st.session_state.get(f'check_{c}')}
+            st.session_state.skip_flags = new_skips
             skips = st.session_state.skip_flags 
             reset_triggered = True
             
@@ -366,7 +373,6 @@ def rotate_bastao():
             # Não houve reset, segue normalmente
             next_index = potential_next_index
     else:
-        # Ninguém elegível na fila (deve ser tratado abaixo)
         next_index = -1
     # --- FIM LÓGICA DE RESET ---
 
@@ -376,9 +382,9 @@ def rotate_bastao():
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
         
-        # 1. Atualiza status do portador atual para Indisponível
-        log_status_change(current_holder, 'Bastão', 'Indisponível', duration)
-        st.session_state.status_texto[current_holder] = 'Indisponível' 
+        # CORREÇÃO CRÍTICA: Mudar o status do portador anterior para '' (Disponível/Aguardando)
+        log_status_change(current_holder, 'Bastão', '', duration)
+        st.session_state.status_texto[current_holder] = '' # Volta para Disponível/Aguardando
         
         # 2. Atualiza status do novo portador para Bastão
         log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
@@ -396,7 +402,6 @@ def rotate_bastao():
         # Se não há próximo elegível (fila vazia, todos pulando)
         print('Ninguém elegível. Forçando re-check e mantendo estado atual.')
         st.warning('Não há próximo consultor elegível na fila no momento.')
-        # Apenas re-checa para garantir que o bastão não seja perdido
         check_and_assume_baton() 
         
     st.rerun()
@@ -507,7 +512,6 @@ if st.session_state.get('gif_warning', False):
     st.error('🚫 Ação inválida! Verifique as regras.'); st.image(GIF_URL_WARNING, width=150)
 
 # Garantir Assunção Inicial
-# Removida a lógica de check_and_assume_baton daqui, pois já é chamada no init_session_state.
 
 # Layout
 col_principal, col_disponibilidade = st.columns([1.5, 1])
@@ -659,5 +663,12 @@ with col_disponibilidade:
 
 print('--- FIM DO RENDER ---')
 
-if rerun_needed:
+# Garante que o re-run final ocorra se necessário
+if st.session_state.get('rerun_needed', False):
+    del st.session_state['rerun_needed']
     st.rerun()
+# Não é mais necessário o if 'rerun_needed' no final, pois o código já tem st.rerun() em todos os callbacks.
+# A variável 'rerun_needed' no código original parecia ser usada apenas para forçar o re-check inicial
+# que foi movido para o init_session_state.
+
+# Removendo a variável 'rerun_needed' da lógica final (se existir) para evitar duplicação de re-runs.
