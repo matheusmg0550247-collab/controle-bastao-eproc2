@@ -8,6 +8,26 @@ from datetime import datetime, timedelta
 from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
 
+# --- Constantes de Consultores ---
+CONSULTORES = sorted([
+    "Alex Paulo da Silva",
+    "Dirceu Gonçalves Siqueira Neto",
+    "Douglas de Souza Gonçalves",
+    "Farley Leandro de Oliveira Juliano", 
+    "Gleis da Silva Rodrigues",
+    "Hugo Leonardo Murta",
+    "Igor Dayrell Gonçalves Correa",
+    "Jerry Marcos dos Santos Neto",
+    "Jonatas Gomes Saraiva",
+    "Leandro Victor Catharino",
+    "Luiz Henrique Barros Oliveira",
+    "Marcelo dos Santos Dutra",
+    "Marina Silva Marques",
+    "Marina Torres do Amaral",
+    "Vanessa Ligiane Pimenta Santos"
+
+])
+
 # --- FUNÇÃO DE CACHE GLOBAL ---
 # @st.cache_resource: Cria um objeto Python mutável (dicionário) que
 # é instanciado apenas uma vez e COMPARTILHADO entre TODAS as sessões/usuários.
@@ -29,29 +49,10 @@ def get_global_state_cache():
     }
 
 # --- Constantes ---
-GOOGLE_CHAT_WEBHOOK_BACKUP = ""
+GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
-CONSULTORES = sorted([
-    "Alex Paulo da Silva",
-    "Dirceu Gonçalves Siqueira Neto",
-    "Douglas de Souza Gonçalves",
-    "Farley Leandro de Oliveira Juliano", 
-    "Gleis da Silva Rodrigues",
-    "Hugo Leonardo Murta",
-    "Igor Dayrell Gonçalves Correa",
-    "Jerry Marcos dos Santos Neto",
-    "João Raphael Petrelli Corgozinho",
-    "Jonatas Gomes Saraiva",
-    "Leandro Victor Catharino",
-    "Luiz Henrique Barros Oliveira",
-    "Marcelo dos Santos Dutra",
-    "Marina Silva Marques",
-    "Marina Torres do Amaral",
-    "Vanessa Ligiane Pimenta Santos"
-
-])
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
@@ -96,7 +97,6 @@ def load_state():
 # --- FIM DAS MUDANÇAS DE PERSISTÊNCIA ---
 
 def send_chat_notification_internal(consultor, status):
-# ... (Função mantida)
     if CHAT_WEBHOOK_BASTAO and status == 'Bastão':
         message_template = "🎉 **BASTÃO GIRADO!** 🎉 \\n\\n- **Novo Responsável:** {consultor}\\n- **Acesse o Painel:** {app_url}"
         message_text = message_template.format(consultor=consultor, app_url=APP_URL_CLOUD) 
@@ -116,19 +116,16 @@ def load_logs(): return [] # Implementação omitida
 def save_logs(l): pass # Implementação omitida
 
 def log_status_change(consultor, old_status, new_status, duration):
-# ... (Função mantida)
     print(f'LOG: {consultor} de "{old_status or '-'}" para "{new_status or '-'}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
     st.session_state.current_status_starts[consultor] = datetime.now()
 
 def format_time_duration(duration):
-# ... (Função mantida)
     if not isinstance(duration, timedelta): return '--:--:--'
     s = int(duration.total_seconds()); h, s = divmod(s, 3600); m, s = divmod(s, 60)
     return f'{h:02}:{m:02}:{s:02}'
 
 def send_daily_report(): 
-# ... (Função mantida)
     print("Tentando enviar backup diário...")
     logs = load_logs() 
     today_str = datetime.now().date().isoformat()
@@ -207,7 +204,6 @@ def init_session_state():
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
 
 def find_next_holder_index(current_index, queue, skips):
-# ... (Função mantida)
     if not queue: return -1
     num_consultores = len(queue)
     if num_consultores == 0: return -1
@@ -225,7 +221,6 @@ def find_next_holder_index(current_index, queue, skips):
     return -1
 
 def check_and_assume_baton():
-# ... (Função mantida)
     print('--- VERIFICA E ASSUME BASTÃO ---')
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
@@ -286,7 +281,6 @@ def check_and_assume_baton():
 # ============================================
 
 def update_queue(consultor):
-# ... (Função mantida)
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     is_checked = st.session_state.get(f'check_{consultor}') 
@@ -346,10 +340,7 @@ def rotate_bastao():
     # --- LÓGICA DE RESET ---
     reset_triggered = False
     
-    # 1. Encontra o PRIMEIRO elegível na fila (índice -1 = início)
     first_eligible_index_overall = find_next_holder_index(-1, queue, skips) 
-    
-    # 2. Encontra o PRÓXIMO elegível APÓS o atual
     potential_next_index = find_next_holder_index(current_index, queue, skips)
 
     if potential_next_index != -1 and first_eligible_index_overall != -1:
@@ -361,9 +352,7 @@ def rotate_bastao():
             print("--- RESETANDO CICLO (Detectado ao passar para o primeiro elegível) ---")
             
             # Resetar as flags de pulo para todos os consultores ATIVOS (checados)
-            # A flag deve ser resetada se ele estiver marcado como disponível (check_{c} == True)
-            new_skips = {c: False for c in CONSULTORES if st.session_state.get(f'check_{c}')}
-            st.session_state.skip_flags = new_skips
+            st.session_state.skip_flags = {c: False for c in CONSULTORES if st.session_state.get(f'check_{c}')}
             skips = st.session_state.skip_flags 
             reset_triggered = True
             
@@ -382,7 +371,7 @@ def rotate_bastao():
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
         
-        # CORREÇÃO CRÍTICA: Mudar o status do portador anterior para '' (Disponível/Aguardando)
+        # 1. Atualiza status do portador atual para '' (Disponível/Aguardando)
         log_status_change(current_holder, 'Bastão', '', duration)
         st.session_state.status_texto[current_holder] = '' # Volta para Disponível/Aguardando
         
@@ -490,14 +479,14 @@ st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 # Auto Refresh & Timed Elements
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 show_gif = False; 
-refresh_interval = 5000 
+refresh_interval = 40000  # ALTERADO: 40 segundos (40.000 milissegundos)
 
 if gif_start_time:
     try:
         elapsed = (datetime.now() - gif_start_time).total_seconds()
         if elapsed < 20: 
              show_gif = True; 
-             refresh_interval = 2000 
+             refresh_interval = 2000 # 2 segundos durante a animação
         else: 
              st.session_state.rotation_gif_start_time = None
     except: 
@@ -662,13 +651,3 @@ with col_disponibilidade:
         send_daily_report()
 
 print('--- FIM DO RENDER ---')
-
-# Garante que o re-run final ocorra se necessário
-if st.session_state.get('rerun_needed', False):
-    del st.session_state['rerun_needed']
-    st.rerun()
-# Não é mais necessário o if 'rerun_needed' no final, pois o código já tem st.rerun() em todos os callbacks.
-# A variável 'rerun_needed' no código original parecia ser usada apenas para forçar o re-check inicial
-# que foi movido para o init_session_state.
-
-# Removendo a variável 'rerun_needed' da lógica final (se existir) para evitar duplicação de re-runs.
