@@ -16,7 +16,8 @@ def get_global_state_cache():
     """Inicializa e retorna o dicionário de estado GLOBAL compartilhado."""
     print("--- Inicializando o Cache de Estado GLOBAL (Executa Apenas 1x) ---")
     return {
-        'status_texto': {nome: '' for nome in CONSULTORES},
+        # CORREÇÃO: Status inicial agora é 'Indisponível' para que o checkbox comece desmarcado.
+        'status_texto': {nome: 'Indisponível' for nome in CONSULTORES},
         'bastao_queue': [],
         'skip_flags': {},
         'bastao_start_time': None,
@@ -29,7 +30,7 @@ def get_global_state_cache():
     }
 
 # --- Constantes ---
-GOOGLE_CHAT_WEBHOOK_BACKUP = ""
+GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
@@ -187,22 +188,17 @@ def init_session_state():
         st.session_state.skip_flags.setdefault(nome, False)
         
         # Sincroniza o status de texto (importante para Saída/Almoço/Atividade)
-        current_status = st.session_state.status_texto.get(nome, '')
+        current_status = st.session_state.status_texto.get(nome, 'Indisponível') # Fallback para 'Indisponível'
         st.session_state.status_texto.setdefault(nome, current_status)
         
         # O checkbox deve ser TRUE se:
-        # 1. Ele está na fila (Disponível e esperando o Bastão)
-        # 2. Ele tem o Bastão
-        # 3. Ele não tem um status de Saída/Almoço/Atividade (status_texto está vazio ou é 'Bastão')
+        # 1. Ele está na fila (Disponível e esperando o Bastão) -> status == ''
+        # 2. Ele tem o Bastão -> status == 'Bastão'
         is_available = (current_status == 'Bastão' or current_status == '') and nome not in st.session_state.priority_return_queue
         
         # Define o estado do checkbox com base no status global carregado
         st.session_state[f'check_{nome}'] = is_available
         
-        # Se um consultor está 'Indisponível' mas o checkbox está True (lógica de inicialização falha), corrige
-        if current_status in STATUSES_DE_SAIDA and st.session_state.get(f'check_{nome}'):
-             st.session_state[f'check_{nome}'] = False
-
         # Garante a data de início do status
         if nome not in st.session_state.current_status_starts:
              st.session_state.current_status_starts[nome] = datetime.now()
@@ -284,8 +280,8 @@ def check_and_assume_baton():
         if current_holder_status:
             print(f'Ninguém elegível, limpando bastão de {current_holder_status}')
             duration = datetime.now() - st.session_state.current_status_starts.get(current_holder_status, datetime.now())
-            log_status_change(current_holder_status, 'Bastão', '', duration)
-            st.session_state.status_texto[current_holder_status] = ''
+            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) # Muda para 'Indisponível' ao invés de ''
+            st.session_state.status_texto[current_holder_status] = 'Indisponível' 
             changed = True
         if st.session_state.bastao_start_time is not None: changed = True
         st.session_state.bastao_start_time = None
@@ -393,8 +389,8 @@ def rotate_bastao():
         next_holder = queue[next_index]
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
-        log_status_change(current_holder, 'Bastão', '', duration)
-        st.session_state.status_texto[current_holder] = ''
+        log_status_change(current_holder, 'Bastão', 'Indisponível', duration) # Deixa como Indisponível (como se tivesse desmarcado)
+        st.session_state.status_texto[current_holder] = 'Indisponível' 
         log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
         st.session_state.status_texto[next_holder] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
@@ -625,13 +621,15 @@ with col_disponibilidade:
     ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'indisponivel': []}
     for nome in CONSULTORES:
         is_checked = st.session_state.get(f'check_{nome}', False)
-        status = st.session_state.status_texto.get(nome, '')
-        if is_checked and status == '': ui_lists['fila'].append(nome) # Adicionado check para status == ''
+        status = st.session_state.status_texto.get(nome, 'Indisponível') # Fallback para 'Indisponível'
+        
+        if is_checked and status == '': ui_lists['fila'].append(nome) # Status '' (vazio) significa 'Aguardando'
         elif status == 'Bastão' and is_checked: ui_lists['fila'].insert(0, nome) # Mover quem tem o bastão para o topo da lista "Na Fila"
         elif status == 'Atividade': ui_lists['atividade'].append(nome)
         elif status == 'Almoço': ui_lists['almoco'].append(nome)
         elif status == 'Saída Temporária': ui_lists['saida'].append(nome)
-        else: ui_lists['indisponivel'].append(nome) # Status Indisponível (Inclui quem desmarcou o checkbox)
+        elif status == 'Indisponível': ui_lists['indisponivel'].append(nome)
+        # Se for um status antigo que não é Saída, ele cai em 'Indisponível' por exclusão
 
     st.subheader(f'✅ Na Fila ({len(ui_lists['fila'])})')
     # Ordem de renderização: quem tem o bastão, depois a fila ordenada, depois quem está checado mas não na fila (erro/nova inclusão)
