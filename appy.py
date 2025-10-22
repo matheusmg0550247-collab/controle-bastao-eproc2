@@ -4,19 +4,16 @@
 import streamlit as st
 import pandas as pd
 import requests
-# REMOVIDOS: import time, import json, import os (não mais necessários para o estado)
+# REMOVIDOS: import time, import json, import os (Não mais usados com st.cache_resource)
 from datetime import datetime, timedelta
 from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
 
 # --- FUNÇÃO DE CACHE GLOBAL ---
-# @st.cache_resource: Cria um objeto Python mutável (dicionário) que
-# é instanciado apenas uma vez e COMPARTILHADO entre TODAS as sessões/usuários.
 @st.cache_resource(show_spinner=False)
 def get_global_state_cache():
     """Inicializa e retorna o dicionário de estado GLOBAL compartilhado."""
     print("--- Inicializando o Cache de Estado GLOBAL (Executa Apenas 1x) ---")
-    # Este dicionário será o estado único e persistente para todos.
     return {
         'status_texto': {nome: '' for nome in CONSULTORES},
         'bastao_queue': [],
@@ -35,25 +32,25 @@ CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/message
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 CONSULTORES = sorted([
-    "Alex Paulo da Silva",
-    "Dirceu Gonçalves Siqueira Neto",
-    "Douglas de Souza Gonçalves",
-    "Farley Leandro de Oliveira Juliano", 
-    "Gleis da Silva Rodrigues",
-    "Hugo Leonardo Murta",
-    "Igor Dayrell Gonçalves Correa",
-    "Jerry Marcos dos Santos Neto",
-    "João Raphael Petrelli Corgozinho",
-    "Jonatas Gomes Saraiva",
-    "Leandro Victor Catharino",
-    "Luiz Henrique Barros Oliveira",
-    "Marcelo dos Santos Dutra",
-    "Marina Silva Marques",
-    "Marina Torres do Amaral",
-    "Vanessa Ligiane Pimenta Santos"
+    "Alex Paulo da Silva",
+    "Dirceu Gonçalves Siqueira Neto",
+    "Douglas de Souza Gonçalves",
+    "Farley Leandro de Oliveira Juliano", 
+    "Gleis da Silva Rodrigues",
+    "Hugo Leonardo Murta",
+    "Igor Dayrell Gonçalves Correa",
+    "Jerry Marcos dos Santos Neto",
+    "João Raphael Petrelli Corgozinho",
+    "Jonatas Gomes Saraiva",
+    "Leandro Victor Catharino",
+    "Luiz Henrique Barros Oliveira",
+    "Marcelo dos Santos Dutra",
+    "Marina Silva Marques",
+    "Marina Torres do Amaral",
+    "Vanessa Ligiane Pimenta Santos"
 
 ])
-# REMOVIDAS as constantes de arquivo local: LOG_FILE, STATE_FILE
+# REMOVIDAS: LOG_FILE, STATE_FILE, pois usamos st.cache_resource
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
@@ -65,7 +62,7 @@ SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/r
 # ============================================
 
 def date_serializer(obj):
-    # Função mantida, mas não mais usada por load/save_state
+    # Função mantida (embora não usada nas novas funções de estado)
     if isinstance(obj, datetime): return obj.isoformat()
     return str(obj)
 
@@ -74,8 +71,8 @@ def save_state():
     """Salva o estado da sessão LOCAL (st.session_state) no estado GLOBAL (Cache)."""
     global_data = get_global_state_cache()
     
-    # As chaves são copiadas diretamente do st.session_state para o cache global.
     try:
+        # Copia os objetos mutáveis da sessão local para o cache global
         global_data['status_texto'] = st.session_state.status_texto.copy()
         global_data['bastao_queue'] = st.session_state.bastao_queue.copy()
         global_data['skip_flags'] = st.session_state.skip_flags.copy()
@@ -91,14 +88,11 @@ def save_state():
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
         print(f'Erro ao salvar estado GLOBAL: {e}')
-        # Em produção, você pode querer logar esse erro
 
 # --- FUNÇÃO `load_state` REESCRITA PARA O ESTADO GLOBAL ---
 def load_state():
     """Carrega o estado GLOBAL (Cache) e retorna para a sessão LOCAL."""
     global_data = get_global_state_cache()
-    
-    # Retorna uma cópia superficial do estado global
     loaded_data = {k: v for k, v in global_data.items()}
     return loaded_data
 # --- FIM DAS MUDANÇAS DE PERSISTÊNCIA ---
@@ -118,7 +112,6 @@ def send_chat_notification_internal(consultor, status):
             print(f"Erro ao enviar notificação de bastão: {e}")
             return False
     return False
-
 
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
 def load_logs(): return [] # Implementação omitida
@@ -163,10 +156,8 @@ def send_daily_report():
         if e.response is not None:
              print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
 
-
 def init_session_state():
     """Inicializa/sincroniza o st.session_state com o estado GLOBAL do cache."""
-    # Chama load_state para buscar o estado global atual
     persisted_state = load_state()
     
     defaults = {
@@ -175,18 +166,15 @@ def init_session_state():
         'bastao_start_time': None, 'current_status_starts': {nome: datetime.now() for nome in CONSULTORES},
         'report_last_run_date': datetime.min, 'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [], 'rotation_gif_start_time': None,
-        # Variáveis locais que NÃO devem ser sobrescritas pelo estado global
-        'play_sound': False, 'gif_warning': False
+        'play_sound': False, 'gif_warning': False # Variáveis locais de sessão
     }
 
+    # Sincroniza o estado GLOBAL para a sessão LOCAL
     for key, default in defaults.items():
-        # Apenas sobrescreve o estado da sessão com o estado GLOBAL persistido
-        # para chaves que NÃO são locais (play_sound e gif_warning)
         if key not in ['play_sound', 'gif_warning']:
-            # Use .copy() para garantir que dicionários e listas sejam distintos
-            # na sessão local, mas mantendo os valores globais.
             value = persisted_state.get(key)
             if value is not None:
+                # Cópia para isolar objetos mutáveis na sessão local
                 if isinstance(value, dict):
                     st.session_state[key] = value.copy()
                 elif isinstance(value, list):
@@ -196,9 +184,9 @@ def init_session_state():
             else:
                  st.session_state.setdefault(key, default)
         else:
-             st.session_state.setdefault(key, default) # Mantém default para variáveis locais
+             st.session_state.setdefault(key, default) 
              
-    # Garante que todos os consultores existam nos dicionários internos, mesmo que o cache esteja vazio
+    # Garante que todos os consultores estão nas listas de controle
     for nome in CONSULTORES:
         if nome not in st.session_state.current_status_starts:
              st.session_state.current_status_starts[nome] = datetime.now()
@@ -206,21 +194,19 @@ def init_session_state():
         st.session_state.skip_flags.setdefault(nome, False)
         st.session_state.status_texto.setdefault(nome, '')
         
-        # Sincroniza o estado do checkbox
+        # Sincroniza o estado inicial do checkbox
         is_active = nome in st.session_state.bastao_queue or bool(st.session_state.status_texto.get(nome))
-        # Esta é uma variável de widget, Streamlit cuida dela, mas garantimos a inicialização
         st.session_state.setdefault(f'check_{nome}', is_active)
 
 
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
     if not st.session_state.bastao_queue and checked_on:
         print('!!! Fila vazia na carga, reconstruindo !!!')
-        # ... (lógica de reconstrução, mantida)
+        # Reconstroi usando a lista de consultores marcados
         st.session_state.bastao_queue = sorted([c for c in CONSULTORES if st.session_state.get(f'check_{c}')])
 
 
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
-
 
 def find_next_holder_index(current_index, queue, skips):
 # ... (Função mantida)
@@ -241,7 +227,7 @@ def find_next_holder_index(current_index, queue, skips):
     return -1
 
 def check_and_assume_baton():
-# ... (Função mantida)
+# ... (Função mantida. A chamada save_state() agora é GLOBAL)
     print('--- VERIFICA E ASSUME BASTÃO ---')
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
@@ -300,7 +286,7 @@ def check_and_assume_baton():
 # ============================================
 
 def update_queue(consultor):
-# ... (Função mantida. A chamada save_state() agora é GLOBAL)
+# ... (Função mantida)
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     is_checked = st.session_state.get(f'check_{consultor}') 
@@ -333,7 +319,7 @@ def update_queue(consultor):
 
 
 def rotate_bastao(): 
-# ... (Função mantida. A chamada save_state() agora é GLOBAL)
+# ... (Função mantida)
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -408,7 +394,7 @@ def rotate_bastao():
 
 
 def toggle_skip(): 
-# ... (Função mantida. A chamada save_state() agora é GLOBAL)
+# ... (Função mantida)
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -432,7 +418,7 @@ def toggle_skip():
 
 
 def update_status(status_text, change_to_available): 
-# ... (Função mantida. A chamada save_state() agora é GLOBAL)
+# ... (Função mantida)
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -486,8 +472,8 @@ st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 # Auto Refresh & Timed Elements
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 show_gif = False; 
-# Aumentamos o refresh padrão para garantir que todos vejam a atualização rápido
-refresh_interval = 5000 # 5 segundos (Era 30000ms)
+# Ajustado para 5 segundos para garantir atualização rápida entre usuários
+refresh_interval = 5000 
 
 if gif_start_time:
     try:
@@ -500,8 +486,7 @@ if gif_start_time:
     except: 
         st.session_state.rotation_gif_start_time = None
         
-# AQUI é onde o refresh força o re-run, que chama init_session_state,
-# que carrega o estado GLOBAL atualizado.
+# A chamada st_autorefresh com o novo refresh_interval
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 
 if st.session_state.get('play_sound', False):
@@ -537,8 +522,8 @@ current_index = queue.index(responsavel) if responsavel in queue else -1
 proximo_index = find_next_holder_index(current_index, queue, skips)
 proximo = queue[proximo_index] if proximo_index != -1 else None
 restante = []
-if proximo_index != -1: # If there is a 'next' person
-# ... (código de cálculo da fila restante, mantido)
+if proximo_index != -1: 
+# ... (código mantido)
     num_q = len(queue)
     start_check_idx = (proximo_index + 1) % num_q
     current_check_idx = start_check_idx
@@ -556,7 +541,7 @@ if proximo_index != -1: # If there is a 'next' person
 
 # --- Coluna Principal ---
 with col_principal:
-# ... (código da Coluna Principal, mantido)
+# ... (código mantido)
     st.header("Responsável pelo Bastão")
     _, col_time = st.columns([0.25, 0.75])
     duration = timedelta()
@@ -614,7 +599,7 @@ with col_principal:
 
 # --- Coluna Disponibilidade ---
 with col_disponibilidade:
-# ... (código da Coluna Disponibilidade, mantido)
+# ... (código mantido)
     st.header('Status dos Consultores')
     st.markdown('Marque/Desmarque para entrar/sair.')
     ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'indisponivel': []}
