@@ -4,7 +4,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-# REMOVIDOS: import time, import json, import os (Não mais usados com st.cache_resource)
 from datetime import datetime, timedelta
 from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
@@ -21,7 +20,8 @@ def get_global_state_cache():
         'bastao_queue': [],
         'skip_flags': {},
         'bastao_start_time': None,
-        'current_status_starts': {nome: datetime.now() for nome in CONSULTORES},
+        # current_status_starts deve ser inicializado com datetime para cada consultor
+        'current_status_starts': {nome: datetime.now() for nome in CONSULTORES}, 
         'report_last_run_date': datetime.min,
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
@@ -29,7 +29,7 @@ def get_global_state_cache():
     }
 
 # --- Constantes ---
-GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
+GOOGLE_CHAT_WEBHOOK_BACKUP = ""
 CHAT_WEBHOOK_BASTAO = "https://chat.googleapis.com/v1/spaces/AAQAXbwpQHY/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=7AQaoGHiWIfv3eczQzVZ-fbQdBqSBOh1CyQ854o1f7k"
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
@@ -52,7 +52,6 @@ CONSULTORES = sorted([
     "Vanessa Ligiane Pimenta Santos"
 
 ])
-# REMOVIDAS: LOG_FILE, STATE_FILE, pois usamos st.cache_resource
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
@@ -64,11 +63,10 @@ SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/r
 # ============================================
 
 def date_serializer(obj):
-# CORRIGIDO: Removido U+00A0
     if isinstance(obj, datetime): return obj.isoformat()
     return str(obj)
 
-# --- FUNÇÃO `save_state` REESCRITA PARA O ESTADO GLOBAL ---
+# --- FUNÇÃO `save_state` (GLOBAL) ---
 def save_state():
     """Salva o estado da sessão LOCAL (st.session_state) no estado GLOBAL (Cache)."""
     global_data = get_global_state_cache()
@@ -91,7 +89,7 @@ def save_state():
     except Exception as e: 
         print(f'Erro ao salvar estado GLOBAL: {e}')
 
-# --- FUNÇÃO `load_state` REESCRITA PARA O ESTADO GLOBAL ---
+# --- FUNÇÃO `load_state` (GLOBAL) ---
 def load_state():
     """Carrega o estado GLOBAL (Cache) e retorna para a sessão LOCAL."""
     global_data = get_global_state_cache()
@@ -163,51 +161,63 @@ def init_session_state():
     persisted_state = load_state()
     
     defaults = {
-        'status_texto': {nome: '' for nome in CONSULTORES}, 'bastao_queue': [],
-        'skip_flags': {},
-        'bastao_start_time': None, 'current_status_starts': {nome: datetime.now() for nome in CONSULTORES},
-        'report_last_run_date': datetime.min, 'bastao_counts': {nome: 0 for nome in CONSULTORES},
-        'priority_return_queue': [], 'rotation_gif_start_time': None,
-        'play_sound': False, 'gif_warning': False # Variáveis locais de sessão
+        'bastao_start_time': None, 
+        'report_last_run_date': datetime.min, 
+        'rotation_gif_start_time': None,
+        'play_sound': False, 
+        'gif_warning': False # Variáveis locais de sessão
     }
 
-    # Sincroniza o estado GLOBAL para a sessão LOCAL
+    # Sincroniza as variáveis simples
     for key, default in defaults.items():
-        if key not in ['play_sound', 'gif_warning']:
-            value = persisted_state.get(key)
-            if value is not None:
-                # Cópia para isolar objetos mutáveis na sessão local
-                if isinstance(value, dict):
-                    st.session_state[key] = value.copy()
-                elif isinstance(value, list):
-                    st.session_state[key] = value.copy()
-                else:
-                    st.session_state[key] = value
-            else:
-                 st.session_state.setdefault(key, default)
-        else:
-             st.session_state.setdefault(key, default) 
-             
-    # Garante que todos os consultores estão nas listas de controle
+        st.session_state.setdefault(key, persisted_state.get(key, default))
+
+    # Sincroniza as coleções de estado (listas e dicionários)
+    st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
+    st.session_state['priority_return_queue'] = persisted_state.get('priority_return_queue', []).copy()
+    st.session_state['bastao_counts'] = persisted_state.get('bastao_counts', {}).copy()
+    st.session_state['skip_flags'] = persisted_state.get('skip_flags', {}).copy()
+    st.session_state['status_texto'] = persisted_state.get('status_texto', {}).copy()
+    st.session_state['current_status_starts'] = persisted_state.get('current_status_starts', {}).copy()
+
+    # Garante que todos os consultores estão nas listas de controle e sincroniza o checkbox
     for nome in CONSULTORES:
-        if nome not in st.session_state.current_status_starts:
-             st.session_state.current_status_starts[nome] = datetime.now()
+        # Garante que as chaves de controle (que não são strings) existam
         st.session_state.bastao_counts.setdefault(nome, 0)
         st.session_state.skip_flags.setdefault(nome, False)
-        st.session_state.status_texto.setdefault(nome, '')
         
-        # Sincroniza o estado inicial do checkbox
-        is_active = nome in st.session_state.bastao_queue or bool(st.session_state.status_texto.get(nome))
-        st.session_state.setdefault(f'check_{nome}', is_active)
+        # Sincroniza o status de texto (importante para Saída/Almoço/Atividade)
+        current_status = st.session_state.status_texto.get(nome, '')
+        st.session_state.status_texto.setdefault(nome, current_status)
+        
+        # O checkbox deve ser TRUE se:
+        # 1. Ele está na fila (Disponível e esperando o Bastão)
+        # 2. Ele tem o Bastão
+        # 3. Ele não tem um status de Saída/Almoço/Atividade (status_texto está vazio ou é 'Bastão')
+        is_available = (current_status == 'Bastão' or current_status == '') and nome not in st.session_state.priority_return_queue
+        
+        # Define o estado do checkbox com base no status global carregado
+        st.session_state[f'check_{nome}'] = is_available
+        
+        # Se um consultor está 'Indisponível' mas o checkbox está True (lógica de inicialização falha), corrige
+        if current_status in STATUSES_DE_SAIDA and st.session_state.get(f'check_{nome}'):
+             st.session_state[f'check_{nome}'] = False
+
+        # Garante a data de início do status
+        if nome not in st.session_state.current_status_starts:
+             st.session_state.current_status_starts[nome] = datetime.now()
 
 
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
+    # Lógica de reconstrução de fila (aprimorada para usar apenas os checados)
     if not st.session_state.bastao_queue and checked_on:
         print('!!! Fila vazia na carga, reconstruindo !!!')
         # Reconstroi usando a lista de consultores marcados
-        st.session_state.bastao_queue = sorted([c for c in CONSULTORES if st.session_state.get(f'check_{c}')])
+        st.session_state.bastao_queue = sorted(list(checked_on))
 
-
+    # GARANTE QUE APÓS CARREGAR TUDO, A ATRIBUIÇÃO DO BASTÃO SEJA VERIFICADA
+    check_and_assume_baton()
+    
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
 
 def find_next_holder_index(current_index, queue, skips):
@@ -229,7 +239,7 @@ def find_next_holder_index(current_index, queue, skips):
     return -1
 
 def check_and_assume_baton():
-# ... (Função mantida. A chamada save_state() agora é GLOBAL)
+# ... (Função mantida)
     print('--- VERIFICA E ASSUME BASTÃO ---')
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
@@ -288,7 +298,7 @@ def check_and_assume_baton():
 # ============================================
 
 def update_queue(consultor):
-# ... (Função mantida)
+    """Callback ao mudar o estado do Checkbox (Disponível/Indisponível)"""
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     is_checked = st.session_state.get(f'check_{consultor}') 
@@ -296,24 +306,28 @@ def update_queue(consultor):
     was_holder_before = consultor == next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     duration = datetime.now() - st.session_state.current_status_starts.get(consultor, datetime.now())
 
-    if is_checked: 
+    if is_checked: # Tornando-se DISPONÍVEL (Voltando à Fila)
         log_status_change(consultor, old_status_text or 'Indisponível', '', duration)
-        st.session_state.status_texto[consultor] = ''
+        st.session_state.status_texto[consultor] = '' # Status de texto limpo (Disponível)
         if consultor not in st.session_state.bastao_queue:
-            st.session_state.bastao_queue.append(consultor) 
+            st.session_state.bastao_queue.append(consultor) # Adiciona ao final da fila
             print(f'Adicionado {consultor} ao fim da fila.')
-        st.session_state.skip_flags[consultor] = False 
-    else: 
-        log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
-        log_status_change(consultor, log_old_status , 'Indisponível', duration)
-        st.session_state.status_texto[consultor] = ''
+        st.session_state.skip_flags[consultor] = False # Limpa o skip
+        if consultor in st.session_state.priority_return_queue:
+            st.session_state.priority_return_queue.remove(consultor)
+            
+    else: # Tornando-se INDISPONÍVEL (Ação manual de desmarcar)
+        # Se já tem um status de Saída, mantenha-o!
+        if old_status_text not in STATUSES_DE_SAIDA:
+             log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
+             log_status_change(consultor, log_old_status , 'Indisponível', duration)
+             st.session_state.status_texto[consultor] = 'Indisponível' # Novo status: Indisponível
+        
         if consultor in st.session_state.bastao_queue:
             st.session_state.bastao_queue.remove(consultor)
             print(f'Removido {consultor} da fila.')
         st.session_state.skip_flags.pop(consultor, None) 
-
-
-    print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
+        
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
@@ -420,26 +434,30 @@ def toggle_skip():
 
 
 def update_status(status_text, change_to_available): 
-# ... (Função mantida)
+    """Callback ao mudar o status para Atividade/Almoço/Saída."""
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
 
-    st.session_state[f'check_{selected}'] = False 
+    # 1. Marca como indisponível e atualiza status
+    st.session_state[f'check_{selected}'] = False # Desmarca o checkbox
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
     log_status_change(selected, old_status, status_text, duration)
-    st.session_state.status_texto[selected] = status_text 
+    st.session_state.status_texto[selected] = status_text # Define o status de Saída
 
+    # 2. Remove da fila e limpa skip flag
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
     st.session_state.skip_flags.pop(selected, None)
 
+    # 3. Gerencia a fila de prioridade
     if status_text == 'Saída Temporária':
         if selected not in st.session_state.priority_return_queue: st.session_state.priority_return_queue.append(selected)
     elif selected in st.session_state.priority_return_queue: st.session_state.priority_return_queue.remove(selected)
 
+    # 4. Verifica o bastão se o portador saiu
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = False
     if was_holder: 
@@ -608,20 +626,25 @@ with col_disponibilidade:
     for nome in CONSULTORES:
         is_checked = st.session_state.get(f'check_{nome}', False)
         status = st.session_state.status_texto.get(nome, '')
-        if is_checked: ui_lists['fila'].append(nome)
+        if is_checked and status == '': ui_lists['fila'].append(nome) # Adicionado check para status == ''
+        elif status == 'Bastão' and is_checked: ui_lists['fila'].insert(0, nome) # Mover quem tem o bastão para o topo da lista "Na Fila"
         elif status == 'Atividade': ui_lists['atividade'].append(nome)
         elif status == 'Almoço': ui_lists['almoco'].append(nome)
         elif status == 'Saída Temporária': ui_lists['saida'].append(nome)
-        else: ui_lists['indisponivel'].append(nome)
+        else: ui_lists['indisponivel'].append(nome) # Status Indisponível (Inclui quem desmarcou o checkbox)
 
     st.subheader(f'✅ Na Fila ({len(ui_lists['fila'])})')
+    # Ordem de renderização: quem tem o bastão, depois a fila ordenada, depois quem está checado mas não na fila (erro/nova inclusão)
     render_order = [c for c in queue if c in ui_lists['fila']] + [c for c in ui_lists['fila'] if c not in queue]
     if not render_order: st.markdown('_Ninguém disponível._')
     else:
         for nome in render_order:
             col_nome, col_check = st.columns([0.8, 0.2])
             key = f'check_{nome}'
+            
+            # NOTA: O on_change no checkbox está agora mais robusto
             col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')
+            
             skip_flag = skips.get(nome, False)
             if nome == responsavel:
                 display = f'<span style="background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;">🔥 {nome}</span>'
@@ -636,13 +659,18 @@ with col_disponibilidade:
         st.subheader(f'{icon} {title} ({len(names)})')
         if not names: st.markdown(f'_Ninguém em {title.lower()}._')
         else:
+            # Renderiza os consultores que estão com status de saída
             for nome in sorted(names):
                 col_nome, col_check = st.columns([0.8, 0.2])
                 key = f'check_{nome}'
-                col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')
+                
+                # Renderiza o checkbox DESMARCADO, mas com o on_change para reentrada
+                col_check.checkbox(' ', key=key, value=False, on_change=update_queue, args=(nome,), label_visibility='collapsed')
+                
                 col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)
         st.markdown('---')
 
+    # A função render_section agora é chamada com o valor False forçado no checkbox.
     render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')
     render_section('Almoço', '🍽️', ui_lists['almoco'], 'blue')
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
