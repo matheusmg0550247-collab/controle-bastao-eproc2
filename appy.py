@@ -16,12 +16,11 @@ def get_global_state_cache():
     """Inicializa e retorna o dicionário de estado GLOBAL compartilhado."""
     print("--- Inicializando o Cache de Estado GLOBAL (Executa Apenas 1x) ---")
     return {
-        # CORREÇÃO: Status inicial agora é 'Indisponível' para que o checkbox comece desmarcado.
+        # Status inicial agora é 'Indisponível'
         'status_texto': {nome: 'Indisponível' for nome in CONSULTORES},
         'bastao_queue': [],
         'skip_flags': {},
         'bastao_start_time': None,
-        # current_status_starts deve ser inicializado com datetime para cada consultor
         'current_status_starts': {nome: datetime.now() for nome in CONSULTORES}, 
         'report_last_run_date': datetime.min,
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
@@ -55,7 +54,7 @@ CONSULTORES = sorted([
 ])
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']
-GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
+GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxf21naF9pZCZjdD1n/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
 
@@ -260,8 +259,8 @@ def check_and_assume_baton():
         if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
             print(f'Limpando bastão de {c} (não deveria ter)')
             duration = datetime.now() - st.session_state.current_status_starts.get(c, datetime.now())
-            log_status_change(c, 'Bastão', '', duration)
-            st.session_state.status_texto[c] = ''
+            log_status_change(c, 'Bastão', 'Indisponível', duration)
+            st.session_state.status_texto[c] = 'Indisponível'
             changed = True
 
     if should_have_baton and st.session_state.status_texto.get(should_have_baton) != 'Bastão':
@@ -280,7 +279,7 @@ def check_and_assume_baton():
         if current_holder_status:
             print(f'Ninguém elegível, limpando bastão de {current_holder_status}')
             duration = datetime.now() - st.session_state.current_status_starts.get(current_holder_status, datetime.now())
-            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) # Muda para 'Indisponível' ao invés de ''
+            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) 
             st.session_state.status_texto[current_holder_status] = 'Indisponível' 
             changed = True
         if st.session_state.bastao_start_time is not None: changed = True
@@ -294,7 +293,7 @@ def check_and_assume_baton():
 # ============================================
 
 def update_queue(consultor):
-    """Callback ao mudar o estado do Checkbox (Disponível/Indisponível)"""
+# ... (Função mantida)
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     is_checked = st.session_state.get(f'check_{consultor}') 
@@ -314,7 +313,7 @@ def update_queue(consultor):
             
     else: # Tornando-se INDISPONÍVEL (Ação manual de desmarcar)
         # Se já tem um status de Saída, mantenha-o!
-        if old_status_text not in STATUSES_DE_SAIDA:
+        if old_status_text not in STATUSES_DE_SAIDA and old_status_text != 'Bastão':
              log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
              log_status_change(consultor, log_old_status , 'Indisponível', duration)
              st.session_state.status_texto[consultor] = 'Indisponível' # Novo status: Indisponível
@@ -331,7 +330,7 @@ def update_queue(consultor):
 
 
 def rotate_bastao(): 
-# ... (Função mantida)
+    """Ação 'Passar' que lida com a rotação e o reset do ciclo."""
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -341,46 +340,45 @@ def rotate_bastao():
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if selected != current_holder:
         st.session_state.gif_warning = True
-        print(f'Aviso: {selected} tentou passar, mas {current_holder} tem o bastão.')
         st.rerun()
         return
 
     current_index = -1
     try: current_index = queue.index(current_holder)
     except ValueError:
-        print(f'ERRO: Portador atual {current_holder} não encontrado na fila {queue}. Tentando recuperar.')
-        st.warning(f'Erro interno: Portador {current_holder} não está na fila.')
+        st.warning(f'Erro interno: Portador {current_holder} não está na fila. Tentando corrigir.')
         if check_and_assume_baton(): st.rerun()
         return
 
     # --- LÓGICA DE RESET ---
     reset_triggered = False
-    first_eligible_index_overall = find_next_holder_index(-1, queue, skips)
+    first_eligible_index_overall = find_next_holder_index(-1, queue, skips) # Próximo elegível a partir do início da fila
 
     if first_eligible_index_overall != -1:
         first_eligible_holder_overall = queue[first_eligible_index_overall]
+        # O índice que viria DEPOIS do atual portador, ignorando pulados
         potential_next_index_no_reset = find_next_holder_index(current_index, queue, skips)
 
+        # 1. Verifica a condição de reset: o próximo seria o PRIMEIRO da fila geral (indicando ciclo completo)
         if potential_next_index_no_reset != -1 and \
            queue[potential_next_index_no_reset] == first_eligible_holder_overall and \
            current_holder != first_eligible_holder_overall :
+            
             print("--- RESETANDO CICLO (Detectado ao passar para o primeiro elegível) ---")
-            new_skips = {}
-            for c in queue: 
-                if st.session_state.get(f'check_{c}'):
-                    new_skips[c] = False 
-                elif c in skips: 
-                    new_skips[c] = False
+            
+            # Resetar as flags de pulo
+            new_skips = {c: False for c in CONSULTORES}
             st.session_state.skip_flags = new_skips
             skips = st.session_state.skip_flags 
             reset_triggered = True
+            
+            # O próximo agora é o primeiro elegível do novo ciclo
             next_index = first_eligible_index_overall
-            print(f'Flags limpas. Próximo índice recalculado para: {next_index} ({queue[next_index] if next_index != -1 else "Nenhum"})')
         else:
+            # Se não houver reset, segue para o próximo normalmente
             next_index = potential_next_index_no_reset
-            print(f'Sem reset. Próximo índice: {next_index} ({queue[next_index] if next_index != -1 else "Nenhum"})')
     else:
-        print('Ninguém elegível na fila inteira.')
+        # Ninguém elegível (fila vazia ou todos pulando)
         next_index = -1
     # --- FIM LÓGICA DE RESET ---
 
@@ -389,19 +387,34 @@ def rotate_bastao():
         next_holder = queue[next_index]
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
-        log_status_change(current_holder, 'Bastão', 'Indisponível', duration) # Deixa como Indisponível (como se tivesse desmarcado)
+        
+        # 1. Atualiza status do portador atual para Indisponível
+        log_status_change(current_holder, 'Bastão', 'Indisponível', duration)
         st.session_state.status_texto[current_holder] = 'Indisponível' 
+        
+        # 2. Atualiza status do novo portador para Bastão
         log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
         st.session_state.status_texto[next_holder] = 'Bastão'
+        
+        # 3. Atualiza controle
         st.session_state.bastao_start_time = datetime.now()
-        st.session_state.skip_flags[next_holder] = False
+        st.session_state.skip_flags[next_holder] = False # Consome flag (se houver)
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
         st.session_state.play_sound = True
         st.session_state.rotation_gif_start_time = datetime.now()
+        
+        # O portador anterior deve ser removido da fila após passar o bastão? 
+        # NÂO! Se ele está disponível (check_on), ele deve voltar ao final da fila.
+        # A lógica atual de fila do bastão usa `check_and_assume_baton` para garantir
+        # que o próximo seja o correto. A fila `bastao_queue` é a ordem mestre.
+        
         save_state()
     else:
-        print('Não foi encontrado próximo elegível após verificação. Bastão permanece com {current_holder} (ou ninguém).')
+        print('Ninguém elegível. Forçando re-check e mantendo estado atual.')
         st.warning('Não há próximo consultor elegível na fila no momento.')
+        # Força o re-check para garantir que o bastão não seja perdido se o último passar sem ninguém elegível.
+        check_and_assume_baton() 
+        
     st.rerun()
 
 
@@ -430,7 +443,7 @@ def toggle_skip():
 
 
 def update_status(status_text, change_to_available): 
-    """Callback ao mudar o status para Atividade/Almoço/Saída."""
+# ... (Função mantida)
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -478,9 +491,9 @@ st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_a
 # O estado é carregado aqui do cache global
 init_session_state()
 
-# --- Scroll to Top ---
+# --- Scroll para o Topo (CORRIGIDO) ---
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
-# --- Fim Scroll to Top ---
+# --- Fim Scroll para o Topo ---
 
 st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')
 st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
@@ -516,17 +529,8 @@ if st.session_state.get('gif_warning', False):
 holder_exists = any(s == 'Bastão' for s in st.session_state.status_texto.values())
 eligible_exists = any(not st.session_state.skip_flags.get(c, False) for c in st.session_state.bastao_queue if st.session_state.get(f'check_{c}'))
 rerun_needed = False
-if not holder_exists and st.session_state.bastao_queue and eligible_exists:
-# ... (código mantido)
-    print('!!! FORÇANDO CHECK ASSUME BASTÃO NO RENDER !!!')
-    if not st.session_state.get('_assign_attempt', False):
-        st.session_state._assign_attempt = True
-        if check_and_assume_baton():
-            print('--> Bastão reassumido no render, marcando para rerun...')
-            rerun_needed = True
-    else:
-        print('AVISO: Segunda tentativa de assumir bastão no render evitada.')
-if '_assign_attempt' in st.session_state: del st.session_state['_assign_attempt']
+# Removida a lógica de check_and_assume_baton daqui, pois já é chamada no init_session_state.
+# Se o bastão for reassumido, o init já define rerun_needed se necessário.
 
 
 # Layout
@@ -621,18 +625,25 @@ with col_disponibilidade:
     ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'indisponivel': []}
     for nome in CONSULTORES:
         is_checked = st.session_state.get(f'check_{nome}', False)
-        status = st.session_state.status_texto.get(nome, 'Indisponível') # Fallback para 'Indisponível'
+        status = st.session_state.status_texto.get(nome, 'Indisponível')
         
-        if is_checked and status == '': ui_lists['fila'].append(nome) # Status '' (vazio) significa 'Aguardando'
-        elif status == 'Bastão' and is_checked: ui_lists['fila'].insert(0, nome) # Mover quem tem o bastão para o topo da lista "Na Fila"
-        elif status == 'Atividade': ui_lists['atividade'].append(nome)
-        elif status == 'Almoço': ui_lists['almoco'].append(nome)
-        elif status == 'Saída Temporária': ui_lists['saida'].append(nome)
-        elif status == 'Indisponível': ui_lists['indisponivel'].append(nome)
-        # Se for um status antigo que não é Saída, ele cai em 'Indisponível' por exclusão
+        # Lógica para popular as listas de UI
+        if status == 'Bastão': 
+            ui_lists['fila'].insert(0, nome)
+        elif status == '': 
+            ui_lists['fila'].append(nome) # Status '' (vazio) significa 'Aguardando'
+        elif status == 'Atividade': 
+            ui_lists['atividade'].append(nome)
+        elif status == 'Almoço': 
+            ui_lists['almoco'].append(nome)
+        elif status == 'Saída Temporária': 
+            ui_lists['saida'].append(nome)
+        elif status == 'Indisponível': 
+            ui_lists['indisponivel'].append(nome)
+        # Se um consultor está 'Na Fila' mas o status não é '' ou 'Bastão', algo está inconsistente.
 
     st.subheader(f'✅ Na Fila ({len(ui_lists['fila'])})')
-    # Ordem de renderização: quem tem o bastão, depois a fila ordenada, depois quem está checado mas não na fila (erro/nova inclusão)
+    # Ordem de renderização
     render_order = [c for c in queue if c in ui_lists['fila']] + [c for c in ui_lists['fila'] if c not in queue]
     if not render_order: st.markdown('_Ninguém disponível._')
     else:
@@ -640,7 +651,6 @@ with col_disponibilidade:
             col_nome, col_check = st.columns([0.8, 0.2])
             key = f'check_{nome}'
             
-            # NOTA: O on_change no checkbox está agora mais robusto
             col_check.checkbox(' ', key=key, on_change=update_queue, args=(nome,), label_visibility='collapsed')
             
             skip_flag = skips.get(nome, False)
@@ -657,12 +667,11 @@ with col_disponibilidade:
         st.subheader(f'{icon} {title} ({len(names)})')
         if not names: st.markdown(f'_Ninguém em {title.lower()}._')
         else:
-            # Renderiza os consultores que estão com status de saída
             for nome in sorted(names):
                 col_nome, col_check = st.columns([0.8, 0.2])
                 key = f'check_{nome}'
                 
-                # Renderiza o checkbox DESMARCADO, mas com o on_change para reentrada
+                # Renderiza o checkbox DESMARCADO. Ao marcar, ele aciona o update_queue (reentrada).
                 col_check.checkbox(' ', key=key, value=False, on_change=update_queue, args=(nome,), label_visibility='collapsed')
                 
                 col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)
