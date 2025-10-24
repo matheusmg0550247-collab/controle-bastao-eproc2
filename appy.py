@@ -602,16 +602,15 @@ col_principal, col_disponibilidade = st.columns([1.5, 1])
 
 # --- Coluna Principal: Alertas e Responsável ---
 with col_principal:
-    # --- NOVO: Container para injeção de som fora da UI principal ---
+    # --- NOVO: Placeholder para injeção de som ---
     sound_placeholder = st.empty()
-    # --- FIM NOVO CONTAINER DE SOM ---
     
     # --- REPOSICIONAMENTO DO SOM ---
-    # O som é injetado no placeholder
+    # O som é injetado no placeholder usando markdown (mais robusto para áudio simples)
     if st.session_state.get('play_sound', 0) > 0:
-        # CORREÇÃO FINAL: Injeta o componente diretamente no placeholder com uma chave simples,
-        # confiando que o placeholder força a re-renderização.
-        sound_placeholder.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key="sound_injection_key")
+        # CORREÇÃO: Usando o placeholder para injetar o componente com HTML permitido (Markdown),
+        # o que é mais robusto contra o Attribute Error.
+        sound_placeholder.markdown(play_sound_html(), unsafe_allow_html=True) 
         # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
         st.session_state.play_sound -= 1
     # --- FIM REPOSICIONAMENTO DO SOM ---
