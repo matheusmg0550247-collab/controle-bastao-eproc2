@@ -56,7 +56,7 @@ BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
-GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
+GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX3ie9nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
 GIF_URL_LUNCH_ALERT = 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjBjN2l5eG52ejN6cW1sYjZobXRsdDd0NjZ6aXV0aGg5aXA5N2EyZCZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/wmGUXuhdoL9TFhDDet/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
@@ -240,9 +240,6 @@ def check_lunch_capacity(consultor_tentativa):
     """
     status_map = st.session_state.status_texto
     
-    # Consultores que devem ser desconsiderados do cálculo do total (não fazem parte da capacidade)
-    # Nota: Consultores que não estão marcados (status Indisponível) também não devem entrar na base de cálculo.
-    
     # Consultores que não devem contar na base (estão fora do jogo)
     excluded_statuses = ['Sessão', 'Ausente', 'Indisponível']
     
@@ -258,10 +255,6 @@ def check_lunch_capacity(consultor_tentativa):
         # A nova contagem de almoço será: atual + 1 (o consultor_tentativa)
         num_almoco_apos_tentativa = num_em_almoco + 1
         
-        # Se o consultor_tentativa está em um status que não é ignorado (ou seja, ele conta na base), o cálculo é simples.
-        # Se ele estiver em 'Atividade' ou for o 'Bastão' (status vazio) ele já conta em 'total_ativos'.
-        
-        # O limite é > 50% dos ativos
         # Proteção contra total_ativos ser 0 (caso improvável, mas evita divisão por zero lógico)
         if total_ativos == 0:
             limite_excedido = False
@@ -552,11 +545,14 @@ def manual_rerun():
 # ============================================
 
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
-st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True)
+
+# Remover esta linha, ela ocultava todos os alertas!
+# st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True) 
+
 # O estado é carregado aqui do cache global
 init_session_state()
 
-# --- Scroll para o Topo (CORRIGIDO) ---
+# --- Scroll para o Topo ---
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
 # --- Fim Scroll para o Topo ---
 
@@ -566,14 +562,14 @@ st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 # Auto Refresh & Timed Elements
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 lunch_alert_time = st.session_state.get('lunch_alert_time')
-show_gif = False; 
+show_rotation_gif = False # Renomeado para evitar confusão com outros gifs
 refresh_interval = 40000 # 40 segundos (40.000 milissegundos)
 
 if gif_start_time:
     try:
         elapsed = (datetime.now() - gif_start_time).total_seconds()
         if elapsed < 20: 
-             show_gif = True; 
+             show_rotation_gif = True; 
              refresh_interval = 2000 # 2 segundos durante a animação
         else: 
              st.session_state.rotation_gif_start_time = None
@@ -596,61 +592,45 @@ if lunch_alert_time:
         st.session_state.lunch_alert_time = None
         
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
-# --- Fim Lógica de Alerta de Almoço ---
 
 if st.session_state.get('play_sound', False):
     st.components.v1.html(play_sound_html(), height=0, width=0); st.session_state.play_sound = False
     
-if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 
-if st.session_state.get('gif_warning', False):
-    st.error('🚫 Ação inválida! Verifique as regras.'); st.image(GIF_URL_WARNING, width=150)
-
-# Alerta de Almoço (aparece no topo com layout lado a lado)
-if show_lunch_alert:
-    
-    # Colocando alerta e GIF lado a lado
-    alert_col_text, alert_col_gif = st.columns([0.8, 0.2])
-    
-    # O consultor que ativou o alerta é o que está no selectbox
-    consultor_bloqueado = st.session_state.consultor_selectbox 
-    
-    with alert_col_text:
-        st.error(f'🚫 **{consultor_bloqueado}**, verificar marcação. Mais da metade dos consultores encontra-se em horário de almoço.')
-        
-    with alert_col_gif:
-        st.image(GIF_URL_LUNCH_ALERT, width=150)
-
-# Layout
+# Layout da Coluna Principal e Disponibilidade
 col_principal, col_disponibilidade = st.columns([1.5, 1])
-queue = st.session_state.bastao_queue
-skips = st.session_state.skip_flags
-responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
-current_index = queue.index(responsavel) if responsavel in queue else -1
-proximo_index = find_next_holder_index(current_index, queue, skips)
-proximo = queue[proximo_index] if proximo_index != -1 else None
-restante = []
-if proximo_index != -1: 
-    num_q = len(queue)
-    start_check_idx = (proximo_index + 1) % num_q
-    current_check_idx = start_check_idx
-    checked_count = 0
-    while checked_count < num_q:
-        if current_check_idx == start_check_idx and checked_count > 0: break
-        if 0 <= current_check_idx < num_q:
-            consultor = queue[current_check_idx]
-            if consultor != responsavel and consultor != proximo and \
-               not skips.get(consultor, False) and \
-               st.session_state.get(f'check_{consultor}'):
-                restante.append(consultor)
-        current_check_idx = (current_check_idx + 1) % num_q
-        checked_count += 1
 
-# --- Coluna Principal ---
+# --- Coluna Principal: Alertas e Responsável ---
 with col_principal:
+    # --- CONTAINER PARA ALERTAS (Rotação e Almoço) ---
+    alert_container = st.container() 
+    
+    with alert_container:
+        if show_rotation_gif:
+            st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
+        
+        # Alerta de Almoço (dentro do container e em colunas)
+        if show_lunch_alert:
+            alert_col_text, alert_col_gif = st.columns([0.7, 0.3]) # Ajuste as proporções conforme necessário
+            
+            consultor_bloqueado = st.session_state.consultor_selectbox 
+            
+            with alert_col_text:
+                st.error(f'🚫 **{consultor_bloqueado}**, verificar marcação. Mais da metade dos consultores encontra-se em horário de almoço.')
+                
+            with alert_col_gif:
+                st.image(GIF_URL_LUNCH_ALERT, width=150)
+        
+        # Aviso de Ação Inválida (também pode ir aqui para consistência)
+        if st.session_state.get('gif_warning', False):
+            st.error('🚫 Ação inválida! Verifique as regras.'); st.image(GIF_URL_WARNING, width=150)
+
+    # --- Fim Container de Alertas ---
+
     st.header("Responsável pelo Bastão")
     _, col_time = st.columns([0.25, 0.75])
     duration = timedelta()
+    responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if responsavel and st.session_state.bastao_start_time:
         try: duration = datetime.now() - st.session_state.bastao_start_time
         except: pass
@@ -661,6 +641,28 @@ with col_principal:
     st.markdown("###")
 
     st.header("Próximos da Fila")
+    queue = st.session_state.bastao_queue
+    skips = st.session_state.skip_flags
+    current_index = queue.index(responsavel) if responsavel in queue else -1
+    proximo_index = find_next_holder_index(current_index, queue, skips)
+    proximo = queue[proximo_index] if proximo_index != -1 else None
+    restante = []
+    if proximo_index != -1: 
+        num_q = len(queue)
+        start_check_idx = (proximo_index + 1) % num_q
+        current_check_idx = start_check_idx
+        checked_count = 0
+        while checked_count < num_q:
+            if current_check_idx == start_check_idx and checked_count > 0: break
+            if 0 <= current_check_idx < num_q:
+                consultor = queue[current_check_idx]
+                if consultor != responsavel and consultor != proximo and \
+                   not skips.get(consultor, False) and \
+                   st.session_state.get(f'check_{consultor}'):
+                    restante.append(consultor)
+            current_check_idx = (current_check_idx + 1) % num_q
+            checked_count += 1
+
     if proximo:
         st.markdown(f'### 1º: **{proximo}**')
     if restante:
@@ -777,7 +779,4 @@ with col_disponibilidade:
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
-    if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()):
-        send_daily_report()
-
-print('--- FIM DO RENDER ---')
+    if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime
