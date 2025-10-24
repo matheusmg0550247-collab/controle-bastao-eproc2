@@ -597,21 +597,25 @@ if lunch_alert_time:
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 # --- Fim Lógica de Alerta de Almoço ---
 
-# --- REPOSICIONAMENTO DO SOM ---
-# O som deve ser o primeiro item a ser executado no render se o flag for setado
-if st.session_state.get('play_sound', 0) > 0:
-    # REINTRODUZ A CHAVE COM STRING GARANTIDA
-    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key=f"sound_player_{st.session_state.play_sound}")
-    # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
-    st.session_state.play_sound -= 1
-# --- FIM REPOSICIONAMENTO DO SOM ---
-    
-
 # Layout da Coluna Principal e Disponibilidade
 col_principal, col_disponibilidade = st.columns([1.5, 1])
 
 # --- Coluna Principal: Alertas e Responsável ---
 with col_principal:
+    # --- NOVO: Container para injeção de som fora da UI principal ---
+    sound_placeholder = st.empty()
+    # --- FIM NOVO CONTAINER DE SOM ---
+    
+    # --- REPOSICIONAMENTO DO SOM ---
+    # O som é injetado no placeholder
+    if st.session_state.get('play_sound', 0) > 0:
+        # CORREÇÃO FINAL: Injeta o componente diretamente no placeholder com uma chave simples,
+        # confiando que o placeholder força a re-renderização.
+        sound_placeholder.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key="sound_injection_key")
+        # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
+        st.session_state.play_sound -= 1
+    # --- FIM REPOSICIONAMENTO DO SOM ---
+    
     # --- CONTAINER PARA ALERTAS (Rotação e Almoço) ---
     alert_container = st.container() 
     
