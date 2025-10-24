@@ -231,7 +231,7 @@ def check_and_assume_baton():
 
 # --- FIM LÓGICA DE BASTÃO E FILA ---
 
-# --- NOVA FUNÇÃO DE LÓGICA DE ALMOÇO ---
+# --- FUNÇÃO DE LÓGICA DE ALMOÇO ---
 def check_lunch_capacity(consultor_tentativa):
     """
     Verifica se a marcação de 'Almoço' pelo consultor_tentativa excede 50%.
@@ -279,7 +279,7 @@ def check_lunch_capacity(consultor_tentativa):
          st.session_state.skip_block.pop(consultor_tentativa) # Limpa se o status atual não for Almoço
          
     return False # Permite prosseguir
-# --- FIM NOVA FUNÇÃO DE LÓGICA DE ALMOÇO ---
+# --- FIM FUNÇÃO DE LÓGICA DE ALMOÇO ---
 
 
 def init_session_state():
@@ -546,9 +546,6 @@ def manual_rerun():
 
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
 
-# Remover esta linha, ela ocultava todos os alertas!
-# st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True) 
-
 # O estado é carregado aqui do cache global
 init_session_state()
 
@@ -592,6 +589,7 @@ if lunch_alert_time:
         st.session_state.lunch_alert_time = None
         
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
+# --- Fim Lógica de Alerta de Almoço ---
 
 if st.session_state.get('play_sound', False):
     st.components.v1.html(play_sound_html(), height=0, width=0); st.session_state.play_sound = False
@@ -779,4 +777,8 @@ with col_disponibilidade:
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
-    if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime
+    # CORREÇÃO DO SYNTAXERROR AQUI: fechando o parêntese e usando .min.date()
+    if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()):
+        send_daily_report()
+
+print('--- FIM DO RENDER ---')
