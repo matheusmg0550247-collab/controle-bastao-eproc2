@@ -374,7 +374,7 @@ def update_queue(consultor):
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
-    st.rerun()
+    # st.rerun() # REMOVIDO: O Streamlit faz o rerun automaticamente após o callback.
 
 
 def rotate_bastao(): 
@@ -388,14 +388,14 @@ def rotate_bastao():
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if selected != current_holder:
         st.session_state.gif_warning = True
-        st.rerun()
+        st.rerun() # MANTIDO: Rerun em caso de erro/aviso
         return
 
     current_index = -1
     try: current_index = queue.index(current_holder)
     except ValueError:
         st.warning(f'Erro interno: Portador {current_holder} não encontrado na fila. Tentando corrigir.')
-        if check_and_assume_baton(): st.rerun()
+        if check_and_assume_baton(): st.rerun() # MANTIDO: Rerun se a correção interna for bem-sucedida
         return
 
     # --- LÓGICA DE RESET ---
@@ -454,7 +454,7 @@ def rotate_bastao():
         st.warning('Não há próximo consultor elegível na fila no momento.')
         check_and_assume_baton() 
         
-    st.rerun()
+    st.rerun() # MANTIDO: Para forçar a exibição do GIF de rotação e som.
 
 
 def toggle_skip(): 
@@ -473,11 +473,11 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() 
+        rotate_bastao() # Chamará st.rerun()
         return 
 
     save_state() 
-    st.rerun()
+    # st.rerun() # REMOVIDO: O Streamlit faz o rerun automaticamente após o callback.
 
 
 def update_status(status_text, change_to_available): 
@@ -494,7 +494,7 @@ def update_status(status_text, change_to_available):
             st.session_state.lunch_alert_time = datetime.now()
             # O selectbox é mantido, o usuário precisa clicar novamente
             save_state()
-            st.rerun() 
+            st.rerun() # MANTIDO: Para exibir o alerta imediatamente no topo.
             return # Sai da função, bloqueando a marcação
 
     # Se passou pelo check_lunch_capacity (ou não era Almoço):
@@ -527,7 +527,7 @@ def update_status(status_text, change_to_available):
         baton_changed = check_and_assume_baton()
     
     if not baton_changed: save_state()
-    st.rerun()
+    # st.rerun() # REMOVIDO: O Streamlit faz o rerun automaticamente após o callback.
 
 
 def manual_rerun():
@@ -538,7 +538,7 @@ def manual_rerun():
          
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     save_state() 
-    st.rerun()
+    st.rerun() # MANTIDO: O objetivo desta função é forçar um rerun manual.
 
 # ============================================
 # 4. EXECUÇÃO PRINCIPAL DO STREAMLIT APP
@@ -777,7 +777,6 @@ with col_disponibilidade:
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
-    # CORREÇÃO DO SYNTAXERROR AQUI: fechando o parêntese e usando .min.date()
     if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()):
         send_daily_report()
 
