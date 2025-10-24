@@ -210,7 +210,7 @@ def check_and_assume_baton():
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
         if current_holder_status != should_have_baton: 
-            st.session_state.play_sound = True # ATIVA O SOM
+            st.session_state.play_sound += 1 # ATIVA O CONTADOR
             send_chat_notification_internal(should_have_baton, 'Bastão') # Notifica
         if st.session_state.skip_flags.get(should_have_baton):
             print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
@@ -292,7 +292,7 @@ def init_session_state():
         'bastao_start_time': None, 
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
-        'play_sound': 0, # MUDANÇA: Usaremos um contador em vez de um booleano para forçar a re-renderização do som.
+        'play_sound': 0, # Usaremos um contador em vez de um booleano para forçar a re-renderização do som.
         'gif_warning': False,
         'lunch_alert_time': None, # Estado para controle de alerta de almoço (LOCAL DE SESSÃO)
     }
@@ -492,12 +492,12 @@ def update_status(status_text, change_to_available):
     # --- LÓGICA DE BLOQUEIO DE ALMOÇO ---
     if status_text == 'Almoço':
         if check_lunch_capacity(selected):
-            # Se a checagem retornar True (deve bloquear), define o alerta e RERUN
+            # Se a checagem retornar True (deve bloquear), define o alerta
             st.session_state.lunch_alert_time = datetime.now()
             # O selectbox é mantido, o usuário precisa clicar novamente
             save_state()
-            st.rerun() # MANTIDO: Para exibir o alerta imediatamente no topo.
-            return # Sai da função, bloqueando a marcação
+            # st.rerun() # REMOVIDO para eliminar o aviso!
+            return # Sai da função. O Streamlit irá disparar o rerun automaticamente.
 
     # Se passou pelo check_lunch_capacity (ou não era Almoço):
     # Garante que o status de bloqueio é limpo caso ele tente outra ação ou consiga o almoço
