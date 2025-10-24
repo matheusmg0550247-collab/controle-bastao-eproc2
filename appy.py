@@ -606,14 +606,13 @@ col_principal, col_disponibilidade = st.columns([1.5, 1])
 # --- Coluna Principal: Alertas e Responsável ---
 with col_principal:
     # --- REPOSICIONAMENTO DO SOM ---
-    # Injeta o componente de áudio no fluxo principal quando necessário.
+    # O som é injetado diretamente no fluxo principal quando necessário.
     if st.session_state.get('play_sound', 0) > 0:
-        # CORREÇÃO: Usando st.markdown com chave de widget baseada no contador. 
-        # Isso força o Streamlit a destruir e recriar o elemento, o que é necessário para o autoplay.
+        # CORREÇÃO DEFINITIVA: Removemos o st.components.v1.html e o parâmetro 'key' que estavam causando o TypeError.
+        # Voltamos ao st.markdown simples, que é o mais compatível para injeção de HTML invisível.
         st.markdown(
             play_sound_html(), 
-            unsafe_allow_html=True,
-            key=f"sound_player_key_{st.session_state.play_sound}"
+            unsafe_allow_html=True
         )
         # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
         st.session_state.play_sound -= 1
