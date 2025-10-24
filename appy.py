@@ -46,7 +46,7 @@ def get_global_state_cache():
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
-        'skip_block': {}, # NOVO: Variável para controle de bloqueio na primeira tentativa (GLOBAL)
+        'skip_block': {}, # Variável para controle de bloqueio na primeira tentativa (GLOBAL)
     }
 
 # --- Constantes ---
@@ -154,7 +154,7 @@ def send_daily_report():
         if e.response is not None:
             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
 
-# --- LÓGICA DE BASTÃO E FILA (MOVIMENTO PARA RESOLVER NameError) ---
+# --- LÓGICA DE BASTÃO E FILA ---
 
 def find_next_holder_index(current_index, queue, skips):
     if not queue: return -1
@@ -241,10 +241,13 @@ def check_lunch_capacity(consultor_tentativa):
     status_map = st.session_state.status_texto
     
     # Consultores que devem ser desconsiderados do cálculo do total (não fazem parte da capacidade)
-    ignored_statuses = ['Sessão', 'Ausente', 'Indisponível']
+    # Nota: Consultores que não estão marcados (status Indisponível) também não devem entrar na base de cálculo.
+    
+    # Consultores que não devem contar na base (estão fora do jogo)
+    excluded_statuses = ['Sessão', 'Ausente', 'Indisponível']
     
     # Total de consultores considerados ativos/elegíveis (não ignorados)
-    total_ativos = sum(1 for c in CONSULTORES if status_map.get(c) not in ignored_statuses)
+    total_ativos = sum(1 for c in CONSULTORES if status_map.get(c) not in excluded_statuses)
     
     # Número atual de consultores em Almoço
     num_em_almoco = sum(1 for c, s in status_map.items() if s == 'Almoço')
@@ -255,8 +258,15 @@ def check_lunch_capacity(consultor_tentativa):
         # A nova contagem de almoço será: atual + 1 (o consultor_tentativa)
         num_almoco_apos_tentativa = num_em_almoco + 1
         
+        # Se o consultor_tentativa está em um status que não é ignorado (ou seja, ele conta na base), o cálculo é simples.
+        # Se ele estiver em 'Atividade' ou for o 'Bastão' (status vazio) ele já conta em 'total_ativos'.
+        
         # O limite é > 50% dos ativos
-        limite_excedido = num_almoco_apos_tentativa > (total_ativos / 2)
+        # Proteção contra total_ativos ser 0 (caso improvável, mas evita divisão por zero lógico)
+        if total_ativos == 0:
+            limite_excedido = False
+        else:
+            limite_excedido = num_almoco_apos_tentativa > (total_ativos / 2)
         
         if limite_excedido:
             # Regra: Se a capacidade exceder, verifique a segunda tentativa
@@ -339,7 +349,6 @@ def init_session_state():
 # ============================================
 
 def update_queue(consultor):
-# ... (Função mantida)
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     is_checked = st.session_state.get(f'check_{consultor}') 
@@ -376,7 +385,6 @@ def update_queue(consultor):
 
 
 def rotate_bastao(): 
-# ... (Função mantida)
     """Ação 'Passar' que lida com a rotação e o reset do ciclo."""
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
@@ -457,7 +465,6 @@ def rotate_bastao():
 
 
 def toggle_skip(): 
-# ... (Função mantida)
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -492,13 +499,13 @@ def update_status(status_text, change_to_available):
         if check_lunch_capacity(selected):
             # Se a checagem retornar True (deve bloquear), define o alerta e RERUN
             st.session_state.lunch_alert_time = datetime.now()
-            # Reinicializa a opção do selectbox para o usuário tentar novamente (opcional, mas limpa a UI)
-            # st.session_state['consultor_selectbox'] = 'Selecione um nome' 
+            # O selectbox é mantido, o usuário precisa clicar novamente
             save_state()
             st.rerun() 
             return # Sai da função, bloqueando a marcação
 
     # Se passou pelo check_lunch_capacity (ou não era Almoço):
+    # Garante que o status de bloqueio é limpo caso ele tente outra ação ou consiga o almoço
     if selected in st.session_state.skip_block:
          st.session_state.skip_block.pop(selected)
     # --- FIM LÓGICA DE BLOQUEIO DE ALMOÇO ---
@@ -537,7 +544,7 @@ def manual_rerun():
          st.session_state.lunch_alert_time = None
          
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    save_state() # Salva o estado após limpar o alerta
+    save_state() 
     st.rerun()
 
 # ============================================
@@ -580,7 +587,8 @@ if lunch_alert_time:
         elapsed_lunch = (datetime.now() - lunch_alert_time).total_seconds()
         if elapsed_lunch < 30: # Mensagem desaparece em 30 segundos
             show_lunch_alert = True
-            refresh_interval = min(refresh_interval, 1000) # 1 segundo de refresh para a mensagem desaparecer rápido
+            # Força o refresh rápido para desaparecer o alerta no tempo certo
+            refresh_interval = min(refresh_interval, 1000) 
         else:
             st.session_state.lunch_alert_time = None # Limpa a mensagem
             
@@ -598,13 +606,20 @@ if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 if st.session_state.get('gif_warning', False):
     st.error('🚫 Ação inválida! Verifique as regras.'); st.image(GIF_URL_WARNING, width=150)
 
-# Alerta de Almoço (aparece no topo)
+# Alerta de Almoço (aparece no topo com layout lado a lado)
 if show_lunch_alert:
-    # Captura o consultor que tentou marcar o almoço, seletor de consultor é redefinido no callback, 
-    # mas o valor anterior pode ser usado aqui se não foi limpo.
+    
+    # Colocando alerta e GIF lado a lado
+    alert_col_text, alert_col_gif = st.columns([0.8, 0.2])
+    
+    # O consultor que ativou o alerta é o que está no selectbox
     consultor_bloqueado = st.session_state.consultor_selectbox 
-    st.warning(f'🚫 **{consultor_bloqueado}**, verificar marcação. Mais da metade dos consultores encontra-se em horário de almoço.')
-    st.image(GIF_URL_LUNCH_ALERT, width=150)
+    
+    with alert_col_text:
+        st.error(f'🚫 **{consultor_bloqueado}**, verificar marcação. Mais da metade dos consultores encontra-se em horário de almoço.')
+        
+    with alert_col_gif:
+        st.image(GIF_URL_LUNCH_ALERT, width=150)
 
 # Layout
 col_principal, col_disponibilidade = st.columns([1.5, 1])
