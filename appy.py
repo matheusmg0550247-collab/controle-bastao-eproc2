@@ -46,10 +46,10 @@ def get_global_state_cache():
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
-        # --- NOVOS ESTADOS GLOBAIS ---
+        # --- NOVOS ESTADOS GLOBAIS (Almoço) ---
         'lunch_warning_active': False,
         'lunch_warning_trigger_consultor': None
-        # -----------------------------
+        # ---------------------------------------
     }
 
 # --- Constantes ---
@@ -163,7 +163,7 @@ def send_daily_report():
         if e.response is not None:
             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
 
-# --- NOVA FUNÇÃO DE LÓGICA DE ALMOÇO ---
+# --- FUNÇÕES DE LÓGICA DE ALMOÇO ---
 def get_eligible_consultants():
     """Retorna a lista de consultores ELEGÍVEIS (excluindo Ausente e Sessão)."""
     ineligible_statuses = ['Ausente', 'Sessão']
@@ -205,8 +205,8 @@ def init_session_state():
         'play_sound': False, 
         'gif_warning': False,
         # --- NOVAS VARS DE ESTADO LOCAL ---
-        'lunch_warning_active': False, 
-        'lunch_warning_trigger_consultor': None
+        'lunch_warning_active': persisted_state.get('lunch_warning_active', False), 
+        'lunch_warning_trigger_consultor': persisted_state.get('lunch_warning_trigger_consultor', None)
         # ----------------------------------
     }
 
@@ -348,11 +348,12 @@ def update_queue(consultor):
             
         # --- Lógica para limpar alerta de Almoço ---
         if st.session_state.lunch_warning_active:
-            # Verifica se a saída do consultor (do almoço ou outro status) faz o limite ser respeitado
+            # O status_texto JÁ FOI ATUALIZADO para '', que é o correto para o check de limite.
             limit_reached, _ = check_lunch_limit()
             if not limit_reached:
                 st.session_state.lunch_warning_active = False
                 st.session_state.lunch_warning_trigger_consultor = None
+                print("Alerta de Almoço desativado por retorno de consultor.")
         # -------------------------------------------
             
     else: # Tornando-se INDISPONÍVEL (Ação manual de desmarcar)
@@ -485,54 +486,46 @@ def update_status(status_text, change_to_available):
     st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
 
-    # --- Lógica de Limite de Almoço ---
-    if status_text == 'Almoço':
-        # Define o status antes de verificar o limite, para incluir o consultor atual na contagem
-        st.session_state.status_texto[selected] = status_text 
-        
-        limit_reached, lunch_count = check_lunch_limit()
-        
-        if limit_reached:
-            print(f'ALERTA ALMOÇO: Limite atingido ({lunch_count}) por {selected}!')
-            st.session_state.lunch_warning_active = True
-            st.session_state.lunch_warning_trigger_consultor = selected
-        
-    # Se o status NÃO é 'Almoço' e o aviso está ativo, verifica se deve ser limpo
-    elif st.session_state.lunch_warning_active:
-        # Temporariamente definimos o status de saída (Almoço -> outro_status) para recalcular a elegibilidade
-        current_status = st.session_state.status_texto.get(selected)
-        if current_status == 'Almoço':
-            # Simula a saída do almoço para a nova contagem
-            st.session_state.status_texto[selected] = status_text # Novo status
-            limit_reached_after_exit, _ = check_lunch_limit()
-            if not limit_reached_after_exit:
-                st.session_state.lunch_warning_active = False
-                st.session_state.lunch_warning_trigger_consultor = None
-            
-            # Nota: O status_texto será sobrescrito logo abaixo, o que está correto.
-            # Se for outro status (Ex: Atividade), a contagem do almoço não muda, então não limpa o aviso.
-    # -----------------------------------
-
-    # 1. Marca como indisponível e atualiza status
+    # 1. Pré-log e cálculos de duração
     st.session_state[f'check_{selected}'] = False # Desmarca o checkbox
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
     
-    # Faz o log e define o status final
+    # 2. Log e Definição do Novo Status (Final)
     log_status_change(selected, old_status, status_text, duration)
     st.session_state.status_texto[selected] = status_text # Define o status de Saída
 
-    # 2. Remove da fila e limpa skip flag
+    # --- Lógica de Limite de Almoço (Verifica APÓS DEFINIR o novo status) ---
+    if status_text == 'Almoço':
+        limit_reached, lunch_count = check_lunch_limit()
+        
+        if limit_reached:
+            print(f'ALERTA ALMOÇO ATIVADO: Limite atingido ({lunch_count}) por {selected}!')
+            st.session_state.lunch_warning_active = True
+            st.session_state.lunch_warning_trigger_consultor = selected
+        
+    # Se o status anterior era 'Almoço' e o novo não é (ou seja, está voltando da saída)
+    # E o alerta de almoço está ativo, revalidamos a condição.
+    # Esta lógica é redundante com o que fazemos no update_queue, mas garante a limpeza imediata.
+    elif old_status == 'Almoço' and st.session_state.lunch_warning_active:
+        limit_reached, _ = check_lunch_limit()
+        if not limit_reached:
+            st.session_state.lunch_warning_active = False
+            st.session_state.lunch_warning_trigger_consultor = None
+            print("Alerta de Almoço desativado por mudança de status.")
+    # ----------------------------------------------------------------------------------
+
+    # 3. Remove da fila e limpa skip flag
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
     st.session_state.skip_flags.pop(selected, None)
 
-    # 3. Gerencia a fila de prioridade
+    # 4. Gerencia a fila de prioridade
     if status_text == 'Saída Temporária':
         if selected not in st.session_state.priority_return_queue: st.session_state.priority_return_queue.append(selected)
     elif selected in st.session_state.priority_return_queue: st.session_state.priority_return_queue.remove(selected)
 
-    # 4. Verifica o bastão se o portador saiu
+    # 5. Verifica o bastão se o portador saiu
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = False
     if was_holder: 
