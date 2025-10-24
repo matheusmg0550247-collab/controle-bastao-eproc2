@@ -54,7 +54,8 @@ CHAT_WEBHOOK_BASTAO = ""
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
-STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária']
+# Adicionado 'Ausente' e 'Sessão' à lista de Status de Saída
+STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
@@ -98,7 +99,7 @@ def load_state():
 
 def send_chat_notification_internal(consultor, status):
     if CHAT_WEBHOOK_BASTAO and status == 'Bastão':
-        message_template = "🎉 **BASTÃO GIRADO!** 🎉 \\n\\n- **Novo Responsável:** {consultor}\\n- **Acesse o Painel:** {app_url}"
+        message_template = "🎉 **BASTÃO GIRADO!** 🎉 \n\n- **Novo Responsável:** {consultor}\n- **Acesse o Painel:** {app_url}"
         message_text = message_template.format(consultor=consultor, app_url=APP_URL_CLOUD) 
         chat_message = {"text": message_text}
         try:
@@ -116,7 +117,7 @@ def load_logs(): return [] # Implementação omitida
 def save_logs(l): pass # Implementação omitida
 
 def log_status_change(consultor, old_status, new_status, duration):
-    print(f'LOG: {consultor} de "{old_status or '-'}" para "{new_status or '-'}" após {duration}')
+    print(f'LOG: {consultor} de "{old_status or "-"}" para "{new_status or "-"}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
     st.session_state.current_status_starts[consultor] = datetime.now()
 
@@ -189,7 +190,7 @@ def init_session_state():
         st.session_state[f'check_{nome}'] = is_available
         
         if nome not in st.session_state.current_status_starts:
-             st.session_state.current_status_starts[nome] = datetime.now()
+               st.session_state.current_status_starts[nome] = datetime.now()
 
 
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
@@ -479,7 +480,7 @@ st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 # Auto Refresh & Timed Elements
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 show_gif = False; 
-refresh_interval = 40000  # ALTERADO: 40 segundos (40.000 milissegundos)
+refresh_interval = 40000 # ALTERADO: 40 segundos (40.000 milissegundos)
 
 if gif_start_time:
     try:
@@ -524,7 +525,7 @@ if proximo_index != -1:
             if consultor != responsavel and consultor != proximo and \
                not skips.get(consultor, False) and \
                st.session_state.get(f'check_{consultor}'):
-                 restante.append(consultor)
+                restante.append(consultor)
         current_check_idx = (current_check_idx + 1) % num_q
         checked_count += 1
 
@@ -576,12 +577,19 @@ with col_principal:
     st.header("**Consultor**")
     st.selectbox('Selecione:', options=['Selecione um nome'] + CONSULTORES, key='consultor_selectbox', label_visibility='collapsed')
     st.markdown("#### "); st.markdown("**Ações:**")
-    c1, c2, c3, c4, c5 = st.columns(5)
+    
+    # MODIFICAÇÃO AQUI: Adicionar 2 colunas para Ausente e Sessão
+    c1, c2, c3, c4, c5, c6, c7 = st.columns(7) 
+    
     c1.button('🎯 Passar', on_click=rotate_bastao, use_container_width=True, help='Passa o bastão para o próximo elegível. Apenas o responsável atual.')
     c2.button('⏭️ Pular', on_click=toggle_skip, use_container_width=True, help='Marca/Desmarca o consultor selecionado para ser pulado na próxima rotação.')
     c3.button('✏️ Atividade', on_click=update_status, args=('Atividade', False,), use_container_width=True)
     c4.button('🍽️ Almoço', on_click=update_status, args=('Almoço', False,), use_container_width=True)
-    c5.button('🚶 Saída', on_click=update_status, args=('Saída Temporária', False,), use_container_width=True)
+    # NOVOS BOTÕES: Ausente e Sessão
+    c5.button('👤 Ausente', on_click=update_status, args=('Ausente', False,), use_container_width=True)
+    c6.button('🎙️ Sessão', on_click=update_status, args=('Sessão', False,), use_container_width=True)
+    c7.button('🚶 Saída', on_click=update_status, args=('Saída Temporária', False,), use_container_width=True)
+    
     st.markdown("####")
     st.button('🔄 Atualizar (Manual)', on_click=manual_rerun, use_container_width=True)
     st.markdown("---")
@@ -591,7 +599,9 @@ with col_disponibilidade:
 # ... (código mantido)
     st.header('Status dos Consultores')
     st.markdown('Marque/Desmarque para entrar/sair.')
-    ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'indisponivel': []}
+    # MODIFICAÇÃO AQUI: Adicionar chaves para Ausente e Sessão
+    ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'ausente': [], 'sessao': [], 'indisponivel': []}
+    
     for nome in CONSULTORES:
         is_checked = st.session_state.get(f'check_{nome}', False)
         status = st.session_state.status_texto.get(nome, 'Indisponível')
@@ -604,6 +614,11 @@ with col_disponibilidade:
             ui_lists['atividade'].append(nome)
         elif status == 'Almoço': 
             ui_lists['almoco'].append(nome)
+        # NOVOS STATUS: Ausente e Sessão
+        elif status == 'Ausente':
+            ui_lists['ausente'].append(nome)
+        elif status == 'Sessão':
+            ui_lists['sessao'].append(nome)
         elif status == 'Saída Temporária': 
             ui_lists['saida'].append(nome)
         elif status == 'Indisponível': 
@@ -644,6 +659,9 @@ with col_disponibilidade:
 
     render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')
     render_section('Almoço', '🍽️', ui_lists['almoco'], 'blue')
+    # NOVAS SEÇÕES DE STATUS: Ausente e Sessão
+    render_section('Ausente', '👤', ui_lists['ausente'], 'violet') # Usando 'violet' para contraste
+    render_section('Sessão', '🎙️', ui_lists['sessao'], 'green')   # Usando 'green' para contraste
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
