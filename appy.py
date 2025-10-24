@@ -450,7 +450,7 @@ def rotate_bastao():
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False # Consome flag (se houver)
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
-        st.session_state.play_sound += 1 # AUMENTA O CONTADOR PARA FORÇAR A RE-RENDERIZAÇÃO DO SOM
+        st.session_state.play_sound += 1 # ATIVA O CONTADOR PARA FORÇAR A RE-RENDERIZAÇÃO DO SOM
         st.session_state.rotation_gif_start_time = datetime.now()
         
         save_state()
@@ -606,12 +606,15 @@ col_principal, col_disponibilidade = st.columns([1.5, 1])
 # --- Coluna Principal: Alertas e Responsável ---
 with col_principal:
     # --- REPOSICIONAMENTO DO SOM ---
-    # O som é injetado diretamente no fluxo principal com st.markdown.
-    # É o método mais simples e, portanto, o mais robusto contra erros de API de componente.
+    # Injeta o componente de áudio no fluxo principal quando necessário.
     if st.session_state.get('play_sound', 0) > 0:
-        # CORREÇÃO: Usando a injeção simples de HTML no módulo st principal, que geralmente
-        # é mais tolerante a erros de API que as chamadas a placeholders nomeados.
-        st.markdown(play_sound_html(), unsafe_allow_html=True)
+        # CORREÇÃO: Usando st.markdown com chave de widget baseada no contador. 
+        # Isso força o Streamlit a destruir e recriar o elemento, o que é necessário para o autoplay.
+        st.markdown(
+            play_sound_html(), 
+            unsafe_allow_html=True,
+            key=f"sound_player_key_{st.session_state.play_sound}"
+        )
         # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
         st.session_state.play_sound -= 1
     # --- FIM REPOSICIONAMENTO DO SOM ---
