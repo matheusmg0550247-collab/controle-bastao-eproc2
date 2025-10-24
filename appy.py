@@ -606,11 +606,21 @@ with col_principal:
     sound_placeholder = st.empty()
     
     # --- REPOSICIONAMENTO DO SOM ---
-    # O som é injetado no placeholder usando markdown (mais robusto para áudio simples)
+    # O som é injetado no placeholder usando markdown com chave para forçar recriação
     if st.session_state.get('play_sound', 0) > 0:
-        # CORREÇÃO: Usando o placeholder para injetar o componente com HTML permitido (Markdown),
-        # o que é mais robusto contra o Attribute Error.
-        sound_placeholder.markdown(play_sound_html(), unsafe_allow_html=True) 
+        # CORREÇÃO: Usando o placeholder para injetar o componente com HTML permitido (Markdown)
+        # e reintroduzindo a chave para forçar a recriação.
+        sound_placeholder.markdown(play_sound_html(), unsafe_allow_html=True)
+        # A maneira mais robusta em Streamlit para áudio é dar um nome de componente único
+        # para que o navegador não bloqueie o autoplay por ver o mesmo componente 
+        # sendo atualizado várias vezes.
+        # Vamos usar um componente customizado que funciona em todas as versões:
+        st.components.v1.html(
+            play_sound_html(), 
+            height=0, width=0, scrolling=False, 
+            key=f"sound_player_key_{st.session_state.play_sound}" # Chave Única
+        )
+        
         # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
         st.session_state.play_sound -= 1
     # --- FIM REPOSICIONAMENTO DO SOM ---
