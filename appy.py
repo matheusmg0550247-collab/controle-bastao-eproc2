@@ -46,6 +46,10 @@ def get_global_state_cache():
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
+        # --- NOVOS ESTADOS GLOBAIS ---
+        'lunch_warning_active': False,
+        'lunch_warning_trigger_consultor': None
+        # -----------------------------
     }
 
 # --- Constantes ---
@@ -59,6 +63,9 @@ STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'S
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
+# --- NOVO GIF PARA ALMOÇO ---
+GIF_URL_LUNCH_WARNING = 'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbWpwcnplMG5tN2VlZmJ6Z2J4bWs5ZGY5c2dobWZrOXoyeDg3Z3JxbCZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/wmGUXuhdoL9TFhDDet/giphy.gif'
+# -----------------------------
 
 # ============================================
 # 2. FUNÇÕES AUXILIARES GLOBAIS
@@ -84,6 +91,10 @@ def save_state():
         global_data['bastao_start_time'] = st.session_state.bastao_start_time
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
+        # --- SALVA NOVOS ESTADOS ---
+        global_data['lunch_warning_active'] = st.session_state.get('lunch_warning_active', False)
+        global_data['lunch_warning_trigger_consultor'] = st.session_state.get('lunch_warning_trigger_consultor', None)
+        # ---------------------------
 
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
@@ -152,6 +163,37 @@ def send_daily_report():
         if e.response is not None:
             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
 
+# --- NOVA FUNÇÃO DE LÓGICA DE ALMOÇO ---
+def get_eligible_consultants():
+    """Retorna a lista de consultores ELEGÍVEIS (excluindo Ausente e Sessão)."""
+    ineligible_statuses = ['Ausente', 'Sessão']
+    eligible = [
+        nome for nome in CONSULTORES
+        if st.session_state.status_texto.get(nome) not in ineligible_statuses
+    ]
+    return eligible
+
+def check_lunch_limit():
+    """Verifica se pelo menos metade dos consultores elegíveis estão em Almoço."""
+    eligible_consultants = get_eligible_consultants()
+    total_eligible = len(eligible_consultants)
+    
+    if total_eligible == 0:
+        return False, 0
+    
+    # Contagem de consultores em Almoço DENTRO do grupo elegível
+    lunch_count = sum(
+        1 for nome in eligible_consultants
+        if st.session_state.status_texto.get(nome) == 'Almoço'
+    )
+
+    # A condição é: (almoço / elegíveis) >= 0.5
+    is_limit_reached = lunch_count / total_eligible >= 0.5
+    
+    # Retorna o status e a contagem de pessoas em almoço
+    return is_limit_reached, lunch_count
+# ---------------------------------------
+
 def init_session_state():
     """Inicializa/sincroniza o st.session_state com o estado GLOBAL do cache."""
     persisted_state = load_state()
@@ -161,7 +203,11 @@ def init_session_state():
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
         'play_sound': False, 
-        'gif_warning': False # Variáveis locais de sessão
+        'gif_warning': False,
+        # --- NOVAS VARS DE ESTADO LOCAL ---
+        'lunch_warning_active': False, 
+        'lunch_warning_trigger_consultor': None
+        # ----------------------------------
     }
 
     # Sincroniza as variáveis simples
@@ -283,7 +329,8 @@ def check_and_assume_baton():
 
 def update_queue(consultor):
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
-    st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
+    st.session_state.gif_warning = False
+    st.session_state.rotation_gif_start_time = None
     is_checked = st.session_state.get(f'check_{consultor}') 
     old_status_text = st.session_state.status_texto.get(consultor, '')
     was_holder_before = consultor == next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
@@ -298,6 +345,15 @@ def update_queue(consultor):
         st.session_state.skip_flags[consultor] = False # Limpa o skip
         if consultor in st.session_state.priority_return_queue:
             st.session_state.priority_return_queue.remove(consultor)
+            
+        # --- Lógica para limpar alerta de Almoço ---
+        if st.session_state.lunch_warning_active:
+            # Verifica se a saída do consultor (do almoço ou outro status) faz o limite ser respeitado
+            limit_reached, _ = check_lunch_limit()
+            if not limit_reached:
+                st.session_state.lunch_warning_active = False
+                st.session_state.lunch_warning_trigger_consultor = None
+        # -------------------------------------------
             
     else: # Tornando-se INDISPONÍVEL (Ação manual de desmarcar)
         # Se já tem um status de Saída ou Bastão, mantenha-o ou mude para Indisponível
@@ -321,7 +377,8 @@ def rotate_bastao():
     """Ação 'Passar' que lida com a rotação e o reset do ciclo."""
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
-    st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
+    st.session_state.gif_warning = False
+    st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
@@ -398,10 +455,10 @@ def rotate_bastao():
 
 
 def toggle_skip(): 
-# ... (Função mantida)
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
-    st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
+    st.session_state.gif_warning = False
+    st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     if not st.session_state.get(f'check_{selected}'): st.warning(f'{selected} não está disponível para marcar/desmarcar.'); return
 
@@ -422,17 +479,47 @@ def toggle_skip():
 
 
 def update_status(status_text, change_to_available): 
-# ... (Função mantida)
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
-    st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
+    st.session_state.gif_warning = False
+    st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
+
+    # --- Lógica de Limite de Almoço ---
+    if status_text == 'Almoço':
+        # Define o status antes de verificar o limite, para incluir o consultor atual na contagem
+        st.session_state.status_texto[selected] = status_text 
+        
+        limit_reached, lunch_count = check_lunch_limit()
+        
+        if limit_reached:
+            print(f'ALERTA ALMOÇO: Limite atingido ({lunch_count}) por {selected}!')
+            st.session_state.lunch_warning_active = True
+            st.session_state.lunch_warning_trigger_consultor = selected
+        
+    # Se o status NÃO é 'Almoço' e o aviso está ativo, verifica se deve ser limpo
+    elif st.session_state.lunch_warning_active:
+        # Temporariamente definimos o status de saída (Almoço -> outro_status) para recalcular a elegibilidade
+        current_status = st.session_state.status_texto.get(selected)
+        if current_status == 'Almoço':
+            # Simula a saída do almoço para a nova contagem
+            st.session_state.status_texto[selected] = status_text # Novo status
+            limit_reached_after_exit, _ = check_lunch_limit()
+            if not limit_reached_after_exit:
+                st.session_state.lunch_warning_active = False
+                st.session_state.lunch_warning_trigger_consultor = None
+            
+            # Nota: O status_texto será sobrescrito logo abaixo, o que está correto.
+            # Se for outro status (Ex: Atividade), a contagem do almoço não muda, então não limpa o aviso.
+    # -----------------------------------
 
     # 1. Marca como indisponível e atualiza status
     st.session_state[f'check_{selected}'] = False # Desmarca o checkbox
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
+    
+    # Faz o log e define o status final
     log_status_change(selected, old_status, status_text, duration)
     st.session_state.status_texto[selected] = status_text # Define o status de Saída
 
@@ -456,9 +543,9 @@ def update_status(status_text, change_to_available):
 
 
 def manual_rerun():
-# ... (Função mantida)
     print('CALLBACK MANUAL RERUN')
-    st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
+    st.session_state.gif_warning = False
+    st.session_state.rotation_gif_start_time = None
     st.rerun()
 
 # ============================================
@@ -501,8 +588,6 @@ if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 if st.session_state.get('gif_warning', False):
     st.error('🚫 Ação inválida! Verifique as regras.'); st.image(GIF_URL_WARNING, width=150)
 
-# Garantir Assunção Inicial
-
 # Layout
 col_principal, col_disponibilidade = st.columns([1.5, 1])
 queue = st.session_state.bastao_queue
@@ -513,7 +598,6 @@ proximo_index = find_next_holder_index(current_index, queue, skips)
 proximo = queue[proximo_index] if proximo_index != -1 else None
 restante = []
 if proximo_index != -1: 
-# ... (código mantido)
     num_q = len(queue)
     start_check_idx = (proximo_index + 1) % num_q
     current_check_idx = start_check_idx
@@ -531,7 +615,15 @@ if proximo_index != -1:
 
 # --- Coluna Principal ---
 with col_principal:
-# ... (código mantido)
+    
+    # --- NOVO: ALERTA DE LIMITE DE ALMOÇO ---
+    if st.session_state.lunch_warning_active:
+        trigger = st.session_state.lunch_warning_trigger_consultor or "Alguém"
+        st.warning(f'⚠️ **Verifique o horário!**\n\nConsultor **{trigger}** acabou de marcar Almoço e metade dos consultores elegíveis estão em horário de almoço.')
+        st.image(GIF_URL_LUNCH_WARNING, width=200)
+        st.markdown('---')
+    # ----------------------------------------
+        
     st.header("Responsável pelo Bastão")
     _, col_time = st.columns([0.25, 0.75])
     duration = timedelta()
@@ -596,7 +688,6 @@ with col_principal:
 
 # --- Coluna Disponibilidade ---
 with col_disponibilidade:
-# ... (código mantido)
     st.header('Status dos Consultores')
     st.markdown('Marque/Desmarque para entrar/sair.')
     # MODIFICAÇÃO AQUI: Adicionar chaves para Ausente e Sessão
@@ -652,6 +743,7 @@ with col_disponibilidade:
                 col_nome, col_check = st.columns([0.8, 0.2])
                 key = f'check_{nome}'
                 
+                # Checkbox na seção de Status Indisponível deve ter value=False para forçar o retorno à fila
                 col_check.checkbox(' ', key=key, value=False, on_change=update_queue, args=(nome,), label_visibility='collapsed')
                 
                 col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)
@@ -661,7 +753,7 @@ with col_disponibilidade:
     render_section('Almoço', '🍽️', ui_lists['almoco'], 'blue')
     # NOVAS SEÇÕES DE STATUS: Ausente e Sessão
     render_section('Ausente', '👤', ui_lists['ausente'], 'violet') # Usando 'violet' para contraste
-    render_section('Sessão', '🎙️', ui_lists['sessao'], 'green')   # Usando 'green' para contraste
+    render_section('Sessão', '🎙️', ui_lists['sessao'], 'green')    # Usando 'green' para contraste
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
