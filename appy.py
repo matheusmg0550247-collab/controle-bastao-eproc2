@@ -376,7 +376,7 @@ def update_queue(consultor):
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
-    # st.rerun() # REMOVIDO
+    # Retorna o controle. O Streamlit fará o rerun.
 
 
 def rotate_bastao(): 
@@ -463,10 +463,15 @@ def toggle_skip():
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
-    if not st.session_state.get(f'check_{selected}'): st.warning(f'{selected} não está disponível para marcar/desmarcar.'); return
+    if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return # SAÍDA EM ERRO
 
     current_skip_status = st.session_state.skip_flags.get(selected, False)
+    # CORREÇÃO: A checagem de disponibilidade deve ser feita no início, mas a ação
+    # de pular deve ser permitida se o consultor estiver na fila (checked=True)
+    if not st.session_state.get(f'check_{selected}'): 
+        st.warning(f'{selected} não está na fila para marcar/desmarcar pular.'); 
+        return # SAÍDA EM ERRO
+    
     st.session_state.skip_flags[selected] = not current_skip_status
     new_status_str = 'MARCADO para pular' if not current_skip_status else 'DESMARCADO para pular'
     print(f'{selected} foi {new_status_str}')
@@ -475,11 +480,11 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() # Chamará st.rerun() e retornará
-        return 
+        rotate_bastao() # Chamará st.rerun()
+        return # SAÍDA APÓS A ROTAÇÃO
 
     save_state() 
-    # st.rerun() # REMOVIDO
+    # Retorna o controle. O Streamlit fará o rerun.
 
 
 def update_status(status_text, change_to_available): 
@@ -496,8 +501,8 @@ def update_status(status_text, change_to_available):
             st.session_state.lunch_alert_time = datetime.now()
             # O selectbox é mantido, o usuário precisa clicar novamente
             save_state()
-            # st.rerun() # REMOVIDO para eliminar o aviso!
-            return # Sai da função. O Streamlit irá disparar o rerun automaticamente.
+            st.rerun() # MANTIDO: Para exibir o alerta imediatamente no topo (único caso de st.rerun() em callback de botão)
+            return # Sai da função, bloqueando a marcação
 
     # Se passou pelo check_lunch_capacity (ou não era Almoço):
     # Garante que o status de bloqueio é limpo caso ele tente outra ação ou consiga o almoço
@@ -506,6 +511,7 @@ def update_status(status_text, change_to_available):
     # --- FIM LÓGICA DE BLOQUEIO DE ALMOÇO ---
     
     # 1. Marca como indisponível e atualiza status
+    # CORREÇÃO: Remover o st.rerun() não é suficiente; precisamos garantir que o fluxo finalize.
     st.session_state[f'check_{selected}'] = False # Desmarca o checkbox
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
@@ -529,7 +535,7 @@ def update_status(status_text, change_to_available):
         baton_changed = check_and_assume_baton()
     
     if not baton_changed: save_state()
-    # st.rerun() # REMOVIDO
+    # Retorna o controle. O Streamlit fará o rerun.
 
 
 def manual_rerun():
@@ -561,7 +567,7 @@ st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 # Auto Refresh & Timed Elements
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 lunch_alert_time = st.session_state.get('lunch_alert_time')
-show_rotation_gif = False # Renomeado para evitar confusão com outros gifs
+show_rotation_gif = False 
 refresh_interval = 40000 # 40 segundos (40.000 milissegundos)
 
 if gif_start_time:
@@ -596,8 +602,8 @@ st_autorefresh(interval=refresh_interval, key='auto_rerun_key')
 # --- REPOSICIONAMENTO DO SOM ---
 # O som deve ser o primeiro item a ser executado no render se o flag for setado
 if st.session_state.get('play_sound', 0) > 0:
-    # Renderiza o componente HTML de áudio
-    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False)
+    # Renderiza o componente HTML de áudio com uma chave única para forçar a renderização
+    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key=f"sound_player_{st.session_state.play_sound}")
     # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
     st.session_state.play_sound -= 1
 # --- FIM REPOSICIONAMENTO DO SOM ---
