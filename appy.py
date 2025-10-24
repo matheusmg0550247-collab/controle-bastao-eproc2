@@ -600,8 +600,8 @@ st_autorefresh(interval=refresh_interval, key='auto_rerun_key')
 # --- REPOSICIONAMENTO DO SOM ---
 # O som deve ser o primeiro item a ser executado no render se o flag for setado
 if st.session_state.get('play_sound', 0) > 0:
-    # CORRIGIDO: Removido o parâmetro 'key' para evitar o TypeError.
-    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False)
+    # REINTRODUZ A CHAVE COM STRING GARANTIDA
+    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key=f"sound_player_{st.session_state.play_sound}")
     # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
     st.session_state.play_sound -= 1
 # --- FIM REPOSICIONAMENTO DO SOM ---
