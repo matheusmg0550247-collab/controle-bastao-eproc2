@@ -384,7 +384,8 @@ def rotate_bastao():
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
+    if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return # SAÍDA EM ERRO
+
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
@@ -466,8 +467,7 @@ def toggle_skip():
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return # SAÍDA EM ERRO
 
     current_skip_status = st.session_state.skip_flags.get(selected, False)
-    # CORREÇÃO: A checagem de disponibilidade deve ser feita no início, mas a ação
-    # de pular deve ser permitida se o consultor estiver na fila (checked=True)
+    # A checagem de disponibilidade deve ser feita no início.
     if not st.session_state.get(f'check_{selected}'): 
         st.warning(f'{selected} não está na fila para marcar/desmarcar pular.'); 
         return # SAÍDA EM ERRO
@@ -492,16 +492,15 @@ def update_status(status_text, change_to_available):
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': 
-        st.warning('Selecione um consultor.'); return
+        st.warning('Selecione um consultor.'); return # SAÍDA EM ERRO
 
     # --- LÓGICA DE BLOQUEIO DE ALMOÇO ---
     if status_text == 'Almoço':
         if check_lunch_capacity(selected):
             # Se a checagem retornar True (deve bloquear), define o alerta
             st.session_state.lunch_alert_time = datetime.now()
-            # O selectbox é mantido, o usuário precisa clicar novamente
             save_state()
-            st.rerun() # MANTIDO: Para exibir o alerta imediatamente no topo (único caso de st.rerun() em callback de botão)
+            st.rerun() # MANTIDO: Para exibir o alerta imediatamente no topo (ÚNICO CASO CRÍTICO MANTIDO).
             return # Sai da função, bloqueando a marcação
 
     # Se passou pelo check_lunch_capacity (ou não era Almoço):
@@ -511,7 +510,6 @@ def update_status(status_text, change_to_available):
     # --- FIM LÓGICA DE BLOQUEIO DE ALMOÇO ---
     
     # 1. Marca como indisponível e atualiza status
-    # CORREÇÃO: Remover o st.rerun() não é suficiente; precisamos garantir que o fluxo finalize.
     st.session_state[f'check_{selected}'] = False # Desmarca o checkbox
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
@@ -602,8 +600,8 @@ st_autorefresh(interval=refresh_interval, key='auto_rerun_key')
 # --- REPOSICIONAMENTO DO SOM ---
 # O som deve ser o primeiro item a ser executado no render se o flag for setado
 if st.session_state.get('play_sound', 0) > 0:
-    # Renderiza o componente HTML de áudio com uma chave única para forçar a renderização
-    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key=f"sound_player_{st.session_state.play_sound}")
+    # Renderiza o componente HTML de áudio com a chave corrigida (converte para string)
+    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False, key=f"sound_player_{str(st.session_state.play_sound)}")
     # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
     st.session_state.play_sound -= 1
 # --- FIM REPOSICIONAMENTO DO SOM ---
