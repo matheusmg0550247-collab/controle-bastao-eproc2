@@ -209,7 +209,9 @@ def check_and_assume_baton():
         log_status_change(should_have_baton, old_status, 'Bastão', duration)
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        if current_holder_status != should_have_baton: st.session_state.play_sound = True; send_chat_notification_internal(should_have_baton, 'Bastão') # Notifica
+        if current_holder_status != should_have_baton: 
+            st.session_state.play_sound = True # ATIVA O SOM
+            send_chat_notification_internal(should_have_baton, 'Bastão') # Notifica
         if st.session_state.skip_flags.get(should_have_baton):
             print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
             st.session_state.skip_flags[should_have_baton] = False
@@ -290,7 +292,7 @@ def init_session_state():
         'bastao_start_time': None, 
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
-        'play_sound': False, 
+        'play_sound': 0, # MUDANÇA: Usaremos um contador em vez de um booleano para forçar a re-renderização do som.
         'gif_warning': False,
         'lunch_alert_time': None, # Estado para controle de alerta de almoço (LOCAL DE SESSÃO)
     }
@@ -374,7 +376,7 @@ def update_queue(consultor):
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
-    # st.rerun() # REMOVIDO: O Streamlit faz o rerun automaticamente após o callback.
+    # st.rerun() # REMOVIDO
 
 
 def rotate_bastao(): 
@@ -444,7 +446,7 @@ def rotate_bastao():
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False # Consome flag (se houver)
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
-        st.session_state.play_sound = True
+        st.session_state.play_sound += 1 # AUMENTA O CONTADOR PARA FORÇAR A RE-RENDERIZAÇÃO DO SOM
         st.session_state.rotation_gif_start_time = datetime.now()
         
         save_state()
@@ -473,11 +475,11 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() # Chamará st.rerun()
+        rotate_bastao() # Chamará st.rerun() e retornará
         return 
 
     save_state() 
-    # st.rerun() # REMOVIDO: O Streamlit faz o rerun automaticamente após o callback.
+    # st.rerun() # REMOVIDO
 
 
 def update_status(status_text, change_to_available): 
@@ -527,7 +529,7 @@ def update_status(status_text, change_to_available):
         baton_changed = check_and_assume_baton()
     
     if not baton_changed: save_state()
-    # st.rerun() # REMOVIDO: O Streamlit faz o rerun automaticamente após o callback.
+    # st.rerun() # REMOVIDO
 
 
 def manual_rerun():
@@ -591,8 +593,14 @@ if lunch_alert_time:
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 # --- Fim Lógica de Alerta de Almoço ---
 
-if st.session_state.get('play_sound', False):
-    st.components.v1.html(play_sound_html(), height=0, width=0); st.session_state.play_sound = False
+# --- REPOSICIONAMENTO DO SOM ---
+# O som deve ser o primeiro item a ser executado no render se o flag for setado
+if st.session_state.get('play_sound', 0) > 0:
+    # Renderiza o componente HTML de áudio
+    st.components.v1.html(play_sound_html(), height=0, width=0, scrolling=False)
+    # DIMINUI O CONTADOR APÓS TENTAR REPRODUZIR (para garantir que só toque 1x por evento)
+    st.session_state.play_sound -= 1
+# --- FIM REPOSICIONAMENTO DO SOM ---
     
 
 # Layout da Coluna Principal e Disponibilidade
