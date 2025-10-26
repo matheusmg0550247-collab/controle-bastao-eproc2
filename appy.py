@@ -28,14 +28,11 @@ CONSULTORES = sorted([
 ])
 
 # --- FUNÇÃO DE CACHE GLOBAL ---
-# @st.cache_resource: Cria um objeto Python mutável (dicionário) que
-# é instanciado apenas uma vez e COMPARTILHADO entre TODAS as sessões/usuários.
 @st.cache_resource(show_spinner=False)
 def get_global_state_cache():
     """Inicializa e retorna o dicionário de estado GLOBAL compartilhado."""
     print("--- Inicializando o Cache de Estado GLOBAL (Executa Apenas 1x) ---")
     return {
-        # Status inicial agora é 'Indisponível'
         'status_texto': {nome: 'Indisponível' for nome in CONSULTORES},
         'bastao_queue': [],
         'skip_flags': {},
@@ -45,7 +42,7 @@ def get_global_state_cache():
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
-        'lunch_warning_info': None, # <-- MODIFICADO: Aviso de almoço de volta ao Global
+        'lunch_warning_info': None, # <-- Aviso de almoço Global
     }
 
 # --- Constantes ---
@@ -54,11 +51,9 @@ CHAT_WEBHOOK_BASTAO = ""
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
-# Adicionado 'Ausente' e 'Sessão' à lista de Status de Saída
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
-# <-- MODIFICADO: Adicionada a constante do GIF de almoço -->
 GIF_URL_LUNCH_WARNING = 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGZlbHN1azB3b2drdTI1eG10cDEzeWpmcmtwenZxNTV0bnc2OWgzZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bNlqpmBJRDMpxulfFB/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
 
@@ -86,7 +81,7 @@ def save_state():
         global_data['bastao_start_time'] = st.session_state.bastao_start_time
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
-        global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') # <-- MODIFICADO: Salva o aviso globalmente
+        global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') # Salva o aviso globalmente
 
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
@@ -165,12 +160,12 @@ def init_session_state():
         'rotation_gif_start_time': None,
         'play_sound': False, 
         'gif_warning': False, # Variáveis locais de sessão
-        'lunch_warning_info': None # <-- MODIFICADO: Carrega o aviso global
+        'lunch_warning_info': None # Carrega o aviso global
     }
 
     # Sincroniza as variáveis simples
     for key, default in defaults.items():
-        st.session_state.setdefault(key, persisted_state.get(key, default))
+        st.session_state[key] = persisted_state.get(key, default) # <-- MODIFICADO: Sincroniza o valor, não 'setdefault'
 
     # Sincroniza as coleções de estado (listas e dicionários)
     st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
@@ -288,7 +283,7 @@ def check_and_assume_baton():
 def update_queue(consultor):
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
+    st.session_state.lunch_warning_info = None # Limpa aviso global
     
     is_checked = st.session_state.get(f'check_{consultor}') 
     old_status_text = st.session_state.status_texto.get(consultor, '')
@@ -306,7 +301,6 @@ def update_queue(consultor):
             st.session_state.priority_return_queue.remove(consultor)
             
     else: # Tornando-se INDISPONÍVEL (Ação manual de desmarcar)
-        # Se já tem um status de Saída ou Bastão, mantenha-o ou mude para Indisponível
         if old_status_text not in STATUSES_DE_SAIDA and old_status_text != 'Bastão':
             log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
             log_status_change(consultor, log_old_status , 'Indisponível', duration)
@@ -328,7 +322,7 @@ def rotate_bastao():
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
+    st.session_state.lunch_warning_info = None # Limpa aviso global
 
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     queue = st.session_state.bastao_queue
@@ -356,19 +350,15 @@ def rotate_bastao():
         first_eligible_holder_overall = queue[first_eligible_index_overall]
         potential_next_holder = queue[potential_next_index]
 
-        # Condição de Reset: O próximo APÓS o atual é o PRIMEIRO elegível da fila (ciclo completo)
         if potential_next_holder == first_eligible_holder_overall and current_holder != first_eligible_holder_overall:
             print("--- RESETANDO CICLO (Detectado ao passar para o primeiro elegível) ---")
             
-            # Resetar as flags de pulo para todos os consultores ATIVOS (checados)
             st.session_state.skip_flags = {c: False for c in CONSULTORES if st.session_state.get(f'check_{c}')}
             skips = st.session_state.skip_flags 
             reset_triggered = True
             
-            # O índice do próximo é confirmado como o primeiro do novo ciclo
             next_index = first_eligible_index_overall 
         else:
-            # Não houve reset, segue normally
             next_index = potential_next_index
     else:
         next_index = -1
@@ -380,24 +370,20 @@ def rotate_bastao():
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
         
-        # 1. Atualiza status do portador atual para '' (Disponível/Aguardando)
         log_status_change(current_holder, 'Bastão', '', duration)
-        st.session_state.status_texto[current_holder] = '' # Volta para Disponível/Aguardando
+        st.session_state.status_texto[current_holder] = '' 
         
-        # 2. Atualiza status do novo portador para Bastão
         log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
         st.session_state.status_texto[next_holder] = 'Bastão'
         
-        # 3. Atualiza controle
         st.session_state.bastao_start_time = datetime.now()
-        st.session_state.skip_flags[next_holder] = False # Consome flag (se houver)
+        st.session_state.skip_flags[next_holder] = False 
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
         st.session_state.play_sound = True
         st.session_state.rotation_gif_start_time = datetime.now()
         
         save_state()
     else:
-        # Se não há próximo elegível (fila vazia, todos pulando)
         print('Ninguém elegível. Forçando re-check e mantendo estado atual.')
         st.warning('Não há próximo consultor elegível na fila no momento.')
         check_and_assume_baton() 
@@ -410,7 +396,7 @@ def toggle_skip():
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
+    st.session_state.lunch_warning_info = None # Limpa aviso global
 
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     if not st.session_state.get(f'check_{selected}'): st.warning(f'{selected} não está disponível para marcar/desmarcar.'); return
@@ -431,12 +417,14 @@ def toggle_skip():
     st.rerun()
 
 
-# <-- MODIFICADO: Função central com a lógica de 2 cliques e estado global -->
+# <-- MODIFICADO: Esta é a função central com a lógica CORRIGIDA -->
 def update_status(status_text, change_to_available): 
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
+    if not selected or selected == 'Selecione um nome': 
+        st.warning('Selecione um consultor.')
+        return # <-- Adicionado 'return' que faltava
 
     # --- INÍCIO DA LÓGICA DE AVISO/BLOQUEIO DE ALMOÇO (Global) ---
     
@@ -454,42 +442,41 @@ def update_status(status_text, change_to_available):
 
     # 3. Se for "Almoço" e NÃO for a segunda tentativa, verifique a regra
     if status_text == 'Almoço' and not is_second_try:
-        # Lê o estado atual (sincronizado)
         all_statuses = st.session_state.status_texto
         
-        # 3a. Contar consultores em status de exclusão
-        num_sessao = sum(1 for s in all_statuses.values() if s == 'Sessão')
-        num_ausente = sum(1 for s in all_statuses.values() if s == 'Ausente')
+        # 3a. LÓGICA CORRIGIDA: Calcular o "Pool Ativo"
+        # Pool Ativo = Na Fila ('', 'Bastão') + Em Atividade ('Atividade')
+        num_na_fila = sum(1 for s in all_statuses.values() if s == '' or s == 'Bastão')
+        num_atividade = sum(1 for s in all_statuses.values() if s == 'Atividade')
+        total_ativos = num_na_fila + num_atividade
         
-        # 3b. Calcular base elegível
-        total_consultores = len(CONSULTORES)
-        eligible_consultores = total_consultores - num_sessao - num_ausente
-        
-        # 3c. Contar quem já está em almoço
+        # 3b. Contar quem já está em almoço
         num_almoco = sum(1 for s in all_statuses.values() if s == 'Almoço')
         
-        # 3d. Verificar a regra da metade
-        metade_elegivel = eligible_consultores / 2.0
+        # 3c. Calcular o Limite (Metade do Pool Ativo)
+        limite_almoco = total_ativos / 2.0
         
-        # 3e. BLOQUEAR se a regra for atingida (Clique 1)
-        if eligible_consultores > 0 and num_almoco >= metade_elegivel:
-            print(f"AVISO ALMOÇO (Global): {selected}. (Já em almoço: {num_almoco}, Elegíveis: {eligible_consultores})")
+        print(f"Check Almoço: Ativos={total_ativos} (Fila:{num_na_fila}, Ativ:{num_atividade}), EmAlmoço={num_almoco}, Limite={limite_almoco}")
+        
+        # 3d. BLOQUEAR se a regra for atingida (Clique 1)
+        # Se 'num_almoco' (quem JÁ ESTÁ) é >= 'limite_almoco' (o limite)
+        if total_ativos > 0 and num_almoco >= limite_almoco:
+            print(f"AVISO ALMOÇO (Global): {selected}. (Já em almoço: {num_almoco}, Pool Ativo: {total_ativos})")
             
             # ATIVAR O AVISO GLOBAL (Primeira Tentativa) E BLOQUEAR
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
-                'message': f'Consultor {selected} verificar horário. Metade dos consultores ({num_almoco}/{eligible_consultores}) já em horário de almoço. Clique novamente em "Almoço" para confirmar.'
+                'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos ({num_almoco}/{total_ativos}) já em almoço. Clique novamente em "Almoço" para confirmar.'
             }
             save_state() # Salva o estado de aviso
-            # REMOVIDO: st.rerun()
-            return       # Interrompe a função aqui, NÃO define o status. O rerun automático do on_click fará o resto.
+            return       # Interrompe a função aqui. O rerun automático do on_click mostrará o aviso.
             
     # --- FIM DA LÓGICA DE AVISO DE ALMOÇO ---
     
-    # Se chegou aqui, é porque:
+    # Se chegou aqui:
     # 1. Não era "Almoço", OU
-    # 2. Era "Almoço" mas a regra não foi atingida, OU
+    # 2. Era "Almoço" mas a regra NÃO foi atingida, OU
     # 3. Era a "Segunda Tentativa" (is_second_try == True).
 
     # Limpa o aviso global, pois a ação será concluída
@@ -527,7 +514,7 @@ def manual_rerun():
 # ... (Função mantida)
     print('CALLBACK MANUAL RERUN')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
+    st.session_state.lunch_warning_info = None # Limpa aviso global
     st.rerun()
 
 # ============================================
@@ -564,6 +551,7 @@ if gif_start_time:
             refresh_interval = 2000 # 2 segundos durante a animação
         else: 
             st.session_state.rotation_gif_start_time = None
+            save_state() # Salva a limpeza do GIF
     except: 
         st.session_state.rotation_gif_start_time = None
         
@@ -673,14 +661,12 @@ with col_principal:
     st.selectbox('Selecione:', options=['Selecione um nome'] + CONSULTORES, key='consultor_selectbox', label_visibility='collapsed')
     st.markdown("#### "); st.markdown("**Ações:**")
     
-    # MODIFICAÇÃO AQUI: Adicionar 2 colunas para Ausente e Sessão
     c1, c2, c3, c4, c5, c6, c7 = st.columns(7) 
     
     c1.button('🎯 Passar', on_click=rotate_bastao, use_container_width=True, help='Passa o bastão para o próximo elegível. Apenas o responsável atual.')
     c2.button('⏭️ Pular', on_click=toggle_skip, use_container_width=True, help='Marca/Desmarca o consultor selecionado para ser pulado na próxima rotação.')
     c3.button('✏️ Atividade', on_click=update_status, args=('Atividade', False,), use_container_width=True)
     c4.button('🍽️ Almoço', on_click=update_status, args=('Almoço', False,), use_container_width=True)
-    # NOVOS BOTÕES: Ausente e Sessão
     c5.button('👤 Ausente', on_click=update_status, args=('Ausente', False,), use_container_width=True)
     c6.button('🎙️ Sessão', on_click=update_status, args=('Sessão', False,), use_container_width=True)
     c7.button('🚶 Saída', on_click=update_status, args=('Saída Temporária', False,), use_container_width=True)
@@ -694,7 +680,6 @@ with col_disponibilidade:
 # ... (código mantido)
     st.header('Status dos Consultores')
     st.markdown('Marque/Desmarque para entrar/sair.')
-    # MODIFICAÇÃO AQUI: Adicionar chaves para Ausente e Sessão
     ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'ausente': [], 'sessao': [], 'indisponivel': []}
     
     for nome in CONSULTORES:
@@ -709,7 +694,6 @@ with col_disponibilidade:
             ui_lists['atividade'].append(nome)
         elif status == 'Almoço': 
             ui_lists['almoco'].append(nome)
-        # NOVOS STATUS: Ausente e Sessão
         elif status == 'Ausente':
             ui_lists['ausente'].append(nome)
         elif status == 'Sessão':
@@ -754,9 +738,8 @@ with col_disponibilidade:
 
     render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')
     render_section('Almoço', '🍽️', ui_lists['almoco'], 'blue')
-    # NOVAS SEÇÕES DE STATUS: Ausente e Sessão
-    render_section('Ausente', '👤', ui_lists['ausente'], 'violet') # Usando 'violet' para contraste
-    render_section('Sessão', '🎙️', ui_lists['sessao'], 'green')   # Usando 'green' para contraste
+    render_section('Ausente', '👤', ui_lists['ausente'], 'violet') 
+    render_section('Sessão', '🎙️', ui_lists['sessao'], 'green')
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
