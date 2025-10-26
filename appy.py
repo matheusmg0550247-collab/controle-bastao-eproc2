@@ -65,13 +65,9 @@ def date_serializer(obj):
     if isinstance(obj, datetime): return obj.isoformat()
     return str(obj)
 
-# --- FUNÇÃO `save_state` (GLOBAL) ---
 def save_state():
-    """Salva o estado da sessão LOCAL (st.session_state) no estado GLOBAL (Cache)."""
     global_data = get_global_state_cache()
-    
     try:
-        # Salva apenas os estados que realmente são compartilhados
         global_data['status_texto'] = st.session_state.status_texto.copy()
         global_data['bastao_queue'] = st.session_state.bastao_queue.copy()
         global_data['skip_flags'] = st.session_state.skip_flags.copy()
@@ -82,21 +78,17 @@ def save_state():
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
         global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') 
-
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
         print(f'Erro ao salvar estado GLOBAL: {e}')
 
-# --- FUNÇÃO `load_state` (GLOBAL) ---
 def load_state():
-    """Carrega o estado GLOBAL (Cache) e retorna para a sessão LOCAL."""
     global_data = get_global_state_cache()
-    # Retorna uma cópia para evitar modificar o cache diretamente
     loaded_data = {k: v for k, v in global_data.items()}
     return loaded_data
-# --- FIM DAS MUDANÇAS DE PERSISTÊNCIA ---
 
 def send_chat_notification_internal(consultor, status):
+    # (Código mantido)
     if CHAT_WEBHOOK_BASTAO and status == 'Bastão':
         message_template = "🎉 **BASTÃO GIRADO!** 🎉 \n\n- **Novo Responsável:** {consultor}\n- **Acesse o Painel:** {app_url}"
         message_text = message_template.format(consultor=consultor, app_url=APP_URL_CLOUD) 
@@ -111,14 +103,14 @@ def send_chat_notification_internal(consultor, status):
             return False
     return False
 
+
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
-def load_logs(): return [] # Implementação omitida
-def save_logs(l): pass # Implementação omitida
+def load_logs(): return [] 
+def save_logs(l): pass 
 
 def log_status_change(consultor, old_status, new_status, duration):
     print(f'LOG: {consultor} de "{old_status or "-"}" para "{new_status or "-"}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
-    # Garante que a chave existe antes de atribuir
     if consultor not in st.session_state.current_status_starts:
         st.session_state.current_status_starts[consultor] = datetime.now()
     st.session_state.current_status_starts[consultor] = datetime.now()
@@ -130,6 +122,7 @@ def format_time_duration(duration):
     return f'{h:02}:{m:02}:{s:02}'
 
 def send_daily_report(): 
+    # (Código mantido)
     print("Tentando enviar backup diário...")
     logs = load_logs() 
     today_str = datetime.now().date().isoformat()
@@ -163,21 +156,19 @@ def init_session_state():
         'bastao_start_time': None, 
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
-        'play_sound': False, 
-        'gif_warning': False, 
-        'lunch_warning_info': None,
-        'just_received_baton': False # <-- MODIFICADO: Flag para controle do som
+        'play_sound': False, # Flag local
+        'gif_warning': False, # Flag local
+        'lunch_warning_info': None # Carrega global
     }
 
     # Sincroniza as variáveis simples
     for key, default in defaults.items():
-        # Carrega o estado global, exceto flags locais como 'play_sound', 'gif_warning', 'just_received_baton'
-        if key in ['play_sound', 'gif_warning', 'just_received_baton']:
+        if key in ['play_sound', 'gif_warning']: # Mantém flags locais
             st.session_state.setdefault(key, default)
-        else:
+        else: # Carrega do global
             st.session_state[key] = persisted_state.get(key, default)
 
-    # Sincroniza as coleções de estado (listas e dicionários)
+    # Sincroniza as coleções de estado
     st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
     st.session_state['priority_return_queue'] = persisted_state.get('priority_return_queue', []).copy()
     st.session_state['bastao_counts'] = persisted_state.get('bastao_counts', {}).copy()
@@ -185,21 +176,19 @@ def init_session_state():
     st.session_state['status_texto'] = persisted_state.get('status_texto', {}).copy()
     st.session_state['current_status_starts'] = persisted_state.get('current_status_starts', {}).copy()
 
-    # Garante que todos os consultores estão nas listas de controle e sincroniza o checkbox
+    # Garante consultores e sincroniza checkboxes
     for nome in CONSULTORES:
         st.session_state.bastao_counts.setdefault(nome, 0)
         st.session_state.skip_flags.setdefault(nome, False)
         
-        current_status = st.session_state.status_texto.get(nome, 'Indisponível') # Fallback
+        current_status = st.session_state.status_texto.get(nome, 'Indisponível') 
         st.session_state.status_texto.setdefault(nome, current_status)
         
         is_available = (current_status == 'Bastão' or current_status == '') and nome not in st.session_state.priority_return_queue
-        
         st.session_state[f'check_{nome}'] = is_available
         
         if nome not in st.session_state.current_status_starts:
                 st.session_state.current_status_starts[nome] = datetime.now()
-
 
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
     if not st.session_state.bastao_queue and checked_on:
@@ -207,10 +196,10 @@ def init_session_state():
         st.session_state.bastao_queue = sorted(list(checked_on))
 
     check_and_assume_baton()
-    
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
 
 def find_next_holder_index(current_index, queue, skips):
+    # (Código mantido)
     if not queue: return -1
     num_consultores = len(queue)
     if num_consultores == 0: return -1
@@ -227,6 +216,8 @@ def find_next_holder_index(current_index, queue, skips):
     print("AVISO: find_next_holder_index não encontrou ninguém elegível.")
     return -1
 
+
+# <-- MODIFICADO: Ativa o som ao assumir -->
 def check_and_assume_baton():
     print('--- VERIFICA E ASSUME BASTÃO ---')
     queue = st.session_state.bastao_queue
@@ -239,8 +230,6 @@ def check_and_assume_baton():
     first_eligible_index = find_next_holder_index(-1, queue, skips)
     first_eligible_holder = queue[first_eligible_index] if first_eligible_index != -1 else None
 
-    print(f'Fila: {queue}, Skips: {skips}, Próximo Elegível: {first_eligible_holder}, Portador Atual (Status): {current_holder_status}, Atual é Válido?: {is_current_valid}')
-
     should_have_baton = None
     if is_current_valid:
         should_have_baton = current_holder_status
@@ -248,7 +237,7 @@ def check_and_assume_baton():
         should_have_baton = first_eligible_holder
 
     changed = False
-    previous_holder = current_holder_status # Guarda quem tinha antes da verificação
+    previous_holder = current_holder_status 
 
     for c in CONSULTORES:
         if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
@@ -266,7 +255,8 @@ def check_and_assume_baton():
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
         if previous_holder != should_have_baton: 
-            st.session_state.just_received_baton = True # <-- MODIFICADO: Seta a flag para o som
+            st.session_state.play_sound = True # <-- Toca som na assunção
+            print("SOUND TRIGGER: check_and_assume_baton assigned baton.")
             send_chat_notification_internal(should_have_baton, 'Bastão') 
         if st.session_state.skip_flags.get(should_have_baton):
             print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
@@ -322,10 +312,11 @@ def update_queue(consultor):
             print(f'Removido {consultor} da fila.')
         st.session_state.skip_flags.pop(consultor, None) 
         
-    baton_changed = check_and_assume_baton()
+    baton_changed = check_and_assume_baton() # Pode tocar som aqui dentro
     if not baton_changed:
         save_state()
 
+# <-- MODIFICADO: Ativa o som ao passar -->
 def rotate_bastao(): 
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
@@ -380,7 +371,8 @@ def rotate_bastao():
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False 
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
-        st.session_state.just_received_baton = True # <-- MODIFICADO: Seta a flag para o som
+        st.session_state.play_sound = True # <-- Toca som na passagem
+        print("SOUND TRIGGER: rotate_bastao successful.")
         st.session_state.rotation_gif_start_time = datetime.now()
         
         save_state()
@@ -407,7 +399,7 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() 
+        rotate_bastao() # Pode tocar som aqui dentro
         return 
 
     save_state() 
@@ -420,8 +412,6 @@ def update_status(status_text, change_to_available):
         st.warning('Selecione um consultor.')
         return
 
-    # --- INÍCIO DA LÓGICA DE AVISO/BLOQUEIO DE ALMOÇO (Global) ---
-    
     if status_text != 'Almoço':
         st.session_state.lunch_warning_info = None
     
@@ -434,31 +424,25 @@ def update_status(status_text, change_to_available):
 
     if status_text == 'Almoço' and not is_second_try:
         all_statuses = st.session_state.status_texto
-        
         num_na_fila = sum(1 for s in all_statuses.values() if s == '' or s == 'Bastão')
         num_atividade = sum(1 for s in all_statuses.values() if s == 'Atividade')
         total_ativos = num_na_fila + num_atividade
-        
         num_almoco = sum(1 for s in all_statuses.values() if s == 'Almoço')
-        
         limite_almoco = total_ativos / 2.0
         
-        print(f"Check Almoço: Ativos={total_ativos} (Fila:{num_na_fila}, Ativ:{num_atividade}), EmAlmoço={num_almoco}, Limite={limite_almoco}")
+        print(f"Check Almoço: Ativos={total_ativos}, EmAlmoço={num_almoco}, Limite={limite_almoco}")
         
         if total_ativos > 0 and num_almoco >= limite_almoco:
-            print(f"AVISO ALMOÇO (Global): {selected}. (Já em almoço: {num_almoco}, Pool Ativo: {total_ativos})")
-            
+            print(f"AVISO ALMOÇO (Global): {selected}.")
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
-                # <-- MODIFICADO: Mensagem simplificada -->
+                # Mensagem simplificada
                 'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos já em almoço. Clique novamente em "Almoço" para confirmar.'
             }
             save_state() 
             return 
             
-    # --- FIM DA LÓGICA DE AVISO DE ALMOÇO ---
-    
     st.session_state.lunch_warning_info = None
 
     st.session_state[f'check_{selected}'] = False 
@@ -478,7 +462,7 @@ def update_status(status_text, change_to_available):
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = False
     if was_holder: 
-        baton_changed = check_and_assume_baton()
+        baton_changed = check_and_assume_baton() # Pode tocar som aqui dentro
     
     if not baton_changed: 
         save_state() 
@@ -536,20 +520,10 @@ if lunch_warning_info and lunch_warning_info.get('start_time'):
             
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 
-# <-- MODIFICADO: Lógica de som baseada na flag 'just_received_baton' -->
-responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
-selected_consultor = st.session_state.get('consultor_selectbox', 'Selecione um nome')
-
-if st.session_state.get('just_received_baton', False) and \
-   responsavel == selected_consultor and \
-   selected_consultor != 'Selecione um nome':
-    st.session_state.play_sound = True
-    st.session_state.just_received_baton = False # Reseta a flag imediatamente
-    print(f"SOUND TRIGGER: {selected_consultor} just received the baton.")
-
+# <-- MODIFICADO: Lógica de som simplificada -->
 if st.session_state.get('play_sound', False):
     st.components.v1.html(play_sound_html(), height=0, width=0)
-    st.session_state.play_sound = False # Reseta o som após tocar
+    st.session_state.play_sound = False # Reseta o som após renderizar
 
 if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 
@@ -564,6 +538,7 @@ if st.session_state.get('gif_warning', False):
 col_principal, col_disponibilidade = st.columns([1.5, 1])
 queue = st.session_state.bastao_queue
 skips = st.session_state.skip_flags
+responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
 current_index = queue.index(responsavel) if responsavel in queue else -1
 proximo_index = find_next_holder_index(current_index, queue, skips)
 proximo = queue[proximo_index] if proximo_index != -1 else None
@@ -610,7 +585,6 @@ with col_principal:
     elif not restante and proximo: st.markdown("&nbsp;")
 
 
-    # --- Seção Pular (Estilo Ajustado) ---
     skipped_consultants = [c for c, is_skipped in skips.items() if is_skipped and st.session_state.get(f'check_{c}')]
     if skipped_consultants:
         skipped_text = ', '.join(sorted(skipped_consultants))
@@ -625,7 +599,6 @@ with col_principal:
             <span style="color: black; font-weight: normal;">{verbo_retornar} no próximo ciclo!</span>
         </div>
         ''', unsafe_allow_html=True)
-    # --- Fim Seção Pular ---
 
     st.markdown("###")
     st.header("**Consultor**")
