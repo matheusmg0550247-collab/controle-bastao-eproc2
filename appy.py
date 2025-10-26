@@ -45,7 +45,7 @@ def get_global_state_cache():
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
-        # O 'lunch_warning_info' foi movido para o estado de sessão local (abaixo)
+        'lunch_warning_info': None, # <-- MODIFICADO: Aviso de almoço de volta ao Global
     }
 
 # --- Constantes ---
@@ -86,7 +86,7 @@ def save_state():
         global_data['bastao_start_time'] = st.session_state.bastao_start_time
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
-        # Note: 'lunch_warning_info' não é salvo no global, é local.
+        global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') # <-- MODIFICADO: Salva o aviso globalmente
 
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
@@ -165,16 +165,12 @@ def init_session_state():
         'rotation_gif_start_time': None,
         'play_sound': False, 
         'gif_warning': False, # Variáveis locais de sessão
-        'lunch_warning_info': None # <-- MODIFICADO: Estado local para o aviso de almoço
+        'lunch_warning_info': None # <-- MODIFICADO: Carrega o aviso global
     }
 
     # Sincroniza as variáveis simples
     for key, default in defaults.items():
         st.session_state.setdefault(key, persisted_state.get(key, default))
-        
-    # <-- MODIFICADO: Carrega o 'lunch_warning_info' apenas localmente, não do global
-    st.session_state.setdefault('lunch_warning_info', None)
-
 
     # Sincroniza as coleções de estado (listas e dicionários)
     st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
@@ -292,7 +288,7 @@ def check_and_assume_baton():
 def update_queue(consultor):
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso local
+    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
     
     is_checked = st.session_state.get(f'check_{consultor}') 
     old_status_text = st.session_state.status_texto.get(consultor, '')
@@ -332,7 +328,7 @@ def rotate_bastao():
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso local
+    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
 
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     queue = st.session_state.bastao_queue
@@ -414,7 +410,7 @@ def toggle_skip():
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso local
+    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
 
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     if not st.session_state.get(f'check_{selected}'): st.warning(f'{selected} não está disponível para marcar/desmarcar.'); return
@@ -435,56 +431,59 @@ def toggle_skip():
     st.rerun()
 
 
-# <-- MODIFICADO: Esta é a função central da nova lógica -->
+# <-- MODIFICADO: Função central com a lógica de 2 cliques e estado global -->
 def update_status(status_text, change_to_available): 
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
 
-    # --- INÍCIO DA LÓGICA DE AVISO/BLOQUEIO DE ALMOÇO (Local) ---
+    # --- INÍCIO DA LÓGICA DE AVISO/BLOQUEIO DE ALMOÇO (Global) ---
     
-    # 1. Verifica se é uma segunda tentativa (lendo o estado local)
+    # 1. Limpa o aviso se a ação NÃO for "Almoço"
+    if status_text != 'Almoço':
+        st.session_state.lunch_warning_info = None
+    
+    # 2. Verifica se é uma segunda tentativa (lendo o estado global)
     current_lunch_warning = st.session_state.get('lunch_warning_info')
     is_second_try = False
     if current_lunch_warning and current_lunch_warning.get('consultor') == selected:
-         # Verifica se o aviso era para este consultor e se está dentro da janela de 30s
          elapsed = (datetime.now() - current_lunch_warning.get('start_time', datetime.min)).total_seconds()
          if elapsed < 30:
              is_second_try = True # É a segunda tentativa
 
-    # 2. Se for "Almoço" e NÃO for a segunda tentativa, verifique a regra
+    # 3. Se for "Almoço" e NÃO for a segunda tentativa, verifique a regra
     if status_text == 'Almoço' and not is_second_try:
         # Lê o estado atual (sincronizado)
         all_statuses = st.session_state.status_texto
         
-        # 2a. Contar consultores em status de exclusão
+        # 3a. Contar consultores em status de exclusão
         num_sessao = sum(1 for s in all_statuses.values() if s == 'Sessão')
         num_ausente = sum(1 for s in all_statuses.values() if s == 'Ausente')
         
-        # 2b. Calcular base elegível
+        # 3b. Calcular base elegível
         total_consultores = len(CONSULTORES)
         eligible_consultores = total_consultores - num_sessao - num_ausente
         
-        # 2c. Contar quem já está em almoço
+        # 3c. Contar quem já está em almoço
         num_almoco = sum(1 for s in all_statuses.values() if s == 'Almoço')
         
-        # 2d. Verificar a regra da metade
+        # 3d. Verificar a regra da metade
         metade_elegivel = eligible_consultores / 2.0
         
-        # 2e. BLOQUEAR se a regra for atingida
+        # 3e. BLOQUEAR se a regra for atingida (Clique 1)
         if eligible_consultores > 0 and num_almoco >= metade_elegivel:
-            print(f"AVISO ALMOÇO (Local): {selected}. (Já em almoço: {num_almoco}, Elegíveis: {eligible_consultores})")
+            print(f"AVISO ALMOÇO (Global): {selected}. (Já em almoço: {num_almoco}, Elegíveis: {eligible_consultores})")
             
-            # ATIVAR O AVISO LOCAL (Primeira Tentativa) E BLOQUEAR
+            # ATIVAR O AVISO GLOBAL (Primeira Tentativa) E BLOQUEAR
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
-                'message': f'Consultor {selected} verificar horário. Metade dos consultores ({num_almoco}/{eligible_consultores}) já em horário de almoço.'
+                'message': f'Consultor {selected} verificar horário. Metade dos consultores ({num_almoco}/{eligible_consultores}) já em horário de almoço. Clique novamente em "Almoço" para confirmar.'
             }
-            # Não salva o estado global, apenas atualiza a UI local
-            st.rerun()   
-            return       # Interrompe a função aqui, NÃO define o status
+            save_state() # Salva o estado de aviso
+            # REMOVIDO: st.rerun()
+            return       # Interrompe a função aqui, NÃO define o status. O rerun automático do on_click fará o resto.
             
     # --- FIM DA LÓGICA DE AVISO DE ALMOÇO ---
     
@@ -493,7 +492,7 @@ def update_status(status_text, change_to_available):
     # 2. Era "Almoço" mas a regra não foi atingida, OU
     # 3. Era a "Segunda Tentativa" (is_second_try == True).
 
-    # Limpa o aviso local, pois a ação será concluída
+    # Limpa o aviso global, pois a ação será concluída
     st.session_state.lunch_warning_info = None
 
     # 1. Marca como indisponível e atualiza status
@@ -528,7 +527,7 @@ def manual_rerun():
 # ... (Função mantida)
     print('CALLBACK MANUAL RERUN')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso local
+    st.session_state.lunch_warning_info = None # <-- MODIFICADO: Limpa aviso global
     st.rerun()
 
 # ============================================
@@ -536,8 +535,8 @@ def manual_rerun():
 # ============================================
 
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
-# <-- MODIFICADO: Comentado para permitir que os avisos (st.warning) apareçam -->
-# st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True)
+# <-- MODIFICADO: Removida a linha que esconde os alertas -->
+# st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True) 
 # O estado é carregado aqui do cache global
 init_session_state()
 
@@ -550,7 +549,7 @@ st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 
 # <-- MODIFICADO: Lógica de Auto Refresh e Elementos Temporizados -->
 gif_start_time = st.session_state.get('rotation_gif_start_time')
-lunch_warning_info = st.session_state.get('lunch_warning_info') # Lê o aviso local
+lunch_warning_info = st.session_state.get('lunch_warning_info') # Lê o aviso (agora global)
 
 show_gif = False
 show_lunch_warning = False
@@ -568,7 +567,7 @@ if gif_start_time:
     except: 
         st.session_state.rotation_gif_start_time = None
         
-# Verifica GIF de Aviso de Almoço (lendo do estado local)
+# Verifica GIF de Aviso de Almoço (lendo do estado global)
 if lunch_warning_info and lunch_warning_info.get('start_time'):
     try:
         elapsed_lunch = (datetime.now() - lunch_warning_info['start_time']).total_seconds()
@@ -576,8 +575,11 @@ if lunch_warning_info and lunch_warning_info.get('start_time'):
             show_lunch_warning = True
             refresh_interval = 2000 # Força refresh rápido para o timer funcionar
         else:
-            st.session_state.lunch_warning_info = None # Aviso expirado (limpa local)
-    except:
+            # Limpa o aviso se ele expirou (auto-correção)
+            st.session_state.lunch_warning_info = None 
+            save_state() # Salva o estado limpo
+    except Exception as e:
+        print(f"Erro ao processar timer do aviso de almoço: {e}")
         st.session_state.lunch_warning_info = None
             
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
