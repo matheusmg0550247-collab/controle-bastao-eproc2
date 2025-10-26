@@ -81,7 +81,7 @@ def save_state():
         global_data['bastao_start_time'] = st.session_state.bastao_start_time
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
-        global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') # Salva o aviso globalmente
+        global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') 
 
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
@@ -159,8 +159,8 @@ def init_session_state():
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
         'play_sound': False, 
-        'gif_warning': False, # Variáveis locais de sessão
-        'lunch_warning_info': None # Carrega o aviso global
+        'gif_warning': False, 
+        'lunch_warning_info': None 
     }
 
     # Sincroniza as variáveis simples
@@ -183,7 +183,6 @@ def init_session_state():
         current_status = st.session_state.status_texto.get(nome, 'Indisponível') # Fallback
         st.session_state.status_texto.setdefault(nome, current_status)
         
-        # Checkbox é TRUE se: status == 'Bastão' ou status == '' (Disponível na fila)
         is_available = (current_status == 'Bastão' or current_status == '') and nome not in st.session_state.priority_return_queue
         
         st.session_state[f'check_{nome}'] = is_available
@@ -193,12 +192,10 @@ def init_session_state():
 
 
     checked_on = {c for c in CONSULTORES if st.session_state.get(f'check_{c}')}
-    # Lógica de reconstrução de fila
     if not st.session_state.bastao_queue and checked_on:
         print('!!! Fila vazia na carga, reconstruindo !!!')
         st.session_state.bastao_queue = sorted(list(checked_on))
 
-    # GARANTE QUE APÓS CARREGAR TUDO, A ATRIBUIÇÃO DO BASTÃO SEJA VERIFICADA
     check_and_assume_baton()
     
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
@@ -256,7 +253,9 @@ def check_and_assume_baton():
         log_status_change(should_have_baton, old_status, 'Bastão', duration)
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        if current_holder_status != should_have_baton: st.session_state.play_sound = True; send_chat_notification_internal(should_have_baton, 'Bastão') # Notifica
+        if current_holder_status != should_have_baton: 
+            st.session_state.play_sound = True # <-- Toca som
+            send_chat_notification_internal(should_have_baton, 'Bastão') 
         if st.session_state.skip_flags.get(should_have_baton):
             print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
             st.session_state.skip_flags[should_have_baton] = False
@@ -283,28 +282,28 @@ def check_and_assume_baton():
 def update_queue(consultor):
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # Limpa aviso global
+    st.session_state.lunch_warning_info = None 
     
     is_checked = st.session_state.get(f'check_{consultor}') 
     old_status_text = st.session_state.status_texto.get(consultor, '')
     was_holder_before = consultor == next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     duration = datetime.now() - st.session_state.current_status_starts.get(consultor, datetime.now())
 
-    if is_checked: # Tornando-se DISPONÍVEL (Voltando à Fila)
+    if is_checked: 
         log_status_change(consultor, old_status_text or 'Indisponível', '', duration)
-        st.session_state.status_texto[consultor] = '' # Status de texto limpo (Disponível)
+        st.session_state.status_texto[consultor] = '' 
         if consultor not in st.session_state.bastao_queue:
-            st.session_state.bastao_queue.append(consultor) # Adiciona ao final da fila
+            st.session_state.bastao_queue.append(consultor) 
             print(f'Adicionado {consultor} ao fim da fila.')
-        st.session_state.skip_flags[consultor] = False # Limpa o skip
+        st.session_state.skip_flags[consultor] = False 
         if consultor in st.session_state.priority_return_queue:
             st.session_state.priority_return_queue.remove(consultor)
             
-    else: # Tornando-se INDISPONÍVEL (Ação manual de desmarcar)
+    else: 
         if old_status_text not in STATUSES_DE_SAIDA and old_status_text != 'Bastão':
             log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
             log_status_change(consultor, log_old_status , 'Indisponível', duration)
-            st.session_state.status_texto[consultor] = 'Indisponível' # Novo status: Indisponível
+            st.session_state.status_texto[consultor] = 'Indisponível' 
         
         if consultor in st.session_state.bastao_queue:
             st.session_state.bastao_queue.remove(consultor)
@@ -314,14 +313,16 @@ def update_queue(consultor):
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
-    # <-- MODIFICADO: st.rerun() removido -->
+        
+    if baton_changed: # <-- MODIFICADO: Se o bastão mudou, toca som
+        st.rerun()
 
 def rotate_bastao(): 
     """Ação 'Passar' que lida com a rotação e o reset do ciclo."""
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # Limpa aviso global
+    st.session_state.lunch_warning_info = None 
 
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     queue = st.session_state.bastao_queue
@@ -329,13 +330,13 @@ def rotate_bastao():
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if selected != current_holder:
         st.session_state.gif_warning = True
-        return # <-- MODIFICADO: st.rerun() removido -->
+        return 
 
     current_index = -1
     try: current_index = queue.index(current_holder)
     except ValueError:
         st.warning(f'Erro interno: Portador {current_holder} não encontrado na fila. Tentando corrigir.')
-        if check_and_assume_baton(): pass # <-- MODIFICADO: st.rerun() removido -->
+        if check_and_assume_baton(): st.rerun() # <-- MODIFICADO: Rerun se corrigir
         return
 
     # --- LÓGICA DE RESET ---
@@ -377,22 +378,24 @@ def rotate_bastao():
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False 
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
-        st.session_state.play_sound = True
+        st.session_state.play_sound = True # <-- Toca som
         st.session_state.rotation_gif_start_time = datetime.now()
         
         save_state()
+        st.rerun() # <-- MODIFICADO: Adicionado rerun para tocar o som
+        return
     else:
         print('Ninguém elegível. Forçando re-check e mantendo estado atual.')
         st.warning('Não há próximo consultor elegível na fila no momento.')
         check_and_assume_baton() 
         
-    # <-- MODIFICADO: st.rerun() removido -->
+    # <-- MODIFICADO: st.rerun() removido daqui -->
 
 def toggle_skip(): 
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # Limpa aviso global
+    st.session_state.lunch_warning_info = None 
 
     if not selected or selected == 'Selecione um nome': st.warning('Selecione um consultor.'); return
     if not st.session_state.get(f'check_{selected}'): st.warning(f'{selected} não está disponível para marcar/desmarcar.'); return
@@ -406,13 +409,12 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() # Chama o rotate_bastao (que não tem mais rerun)
+        rotate_bastao() # Chama rotate_bastao, que agora tem seu próprio rerun
         return 
 
     save_state() 
     # <-- MODIFICADO: st.rerun() removido -->
 
-# <-- MODIFICADO: Função com lógica de 2 cliques e cálculo de Pool Ativo CORRIGIDO -->
 def update_status(status_text, change_to_available): 
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
@@ -423,94 +425,75 @@ def update_status(status_text, change_to_available):
 
     # --- INÍCIO DA LÓGICA DE AVISO/BLOQUEIO DE ALMOÇO (Global) ---
     
-    # 1. Limpa o aviso se a ação NÃO for "Almoço"
     if status_text != 'Almoço':
         st.session_state.lunch_warning_info = None
     
-    # 2. Verifica se é uma segunda tentativa (lendo o estado global)
     current_lunch_warning = st.session_state.get('lunch_warning_info')
     is_second_try = False
     if current_lunch_warning and current_lunch_warning.get('consultor') == selected:
          elapsed = (datetime.now() - current_lunch_warning.get('start_time', datetime.min)).total_seconds()
          if elapsed < 30:
-             is_second_try = True # É a segunda tentativa
+             is_second_try = True 
 
-    # 3. Se for "Almoço" e NÃO for a segunda tentativa, verifique a regra
     if status_text == 'Almoço' and not is_second_try:
         all_statuses = st.session_state.status_texto
         
-        # 3a. LÓGICA CORRIGIDA: Calcular o "Pool Ativo"
-        # Pool Ativo = Na Fila ('', 'Bastão') + Em Atividade ('Atividade')
+        # LÓGICA CORRIGIDA: Calcular o "Pool Ativo"
         num_na_fila = sum(1 for s in all_statuses.values() if s == '' or s == 'Bastão')
         num_atividade = sum(1 for s in all_statuses.values() if s == 'Atividade')
-        # Precisamos incluir o 'selected' que está prestes a sair para almoço no pool
         total_ativos = num_na_fila + num_atividade
         
-        # 3b. Contar quem já está em almoço
         num_almoco = sum(1 for s in all_statuses.values() if s == 'Almoço')
         
-        # 3c. Calcular o Limite (Metade do Pool Ativo)
         limite_almoco = total_ativos / 2.0
         
         print(f"Check Almoço: Ativos={total_ativos} (Fila:{num_na_fila}, Ativ:{num_atividade}), EmAlmoço={num_almoco}, Limite={limite_almoco}")
         
-        # 3d. BLOQUEAR se a regra for atingida (Clique 1)
-        # Se 'num_almoco' (quem JÁ ESTÁ) é >= 'limite_almoco' (o limite)
         if total_ativos > 0 and num_almoco >= limite_almoco:
             print(f"AVISO ALMOÇO (Global): {selected}. (Já em almoço: {num_almoco}, Pool Ativo: {total_ativos})")
             
-            # ATIVAR O AVISO GLOBAL (Primeira Tentativa) E BLOQUEAR
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
                 'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos ({num_almoco}/{total_ativos}) já em almoço. Clique novamente em "Almoço" para confirmar.'
             }
-            save_state() # Salva o estado de aviso
-            return       # Interrompe a função aqui. O rerun automático do on_click mostrará o aviso.
+            save_state() 
+            return # Interrompe. O rerun automático do on_click mostrará o aviso.
             
     # --- FIM DA LÓGICA DE AVISO DE ALMOÇO ---
     
-    # Se chegou aqui:
-    # 1. Não era "Almoço", OU
-    # 2. Era "Almoço" mas a regra NÃO foi atingida, OU
-    # 3. Era a "Segunda Tentativa" (is_second_try == True).
-
-    # Limpa o aviso global, pois a ação será concluída
     st.session_state.lunch_warning_info = None
 
-    # 1. Marca como indisponível e atualiza status
-    st.session_state[f'check_{selected}'] = False # Desmarca o checkbox
+    st.session_state[f'check_{selected}'] = False 
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
     log_status_change(selected, old_status, status_text, duration)
-    st.session_state.status_texto[selected] = status_text # Define o status de Saída
+    st.session_state.status_texto[selected] = status_text 
 
-    # 2. Remove da fila e limpa skip flag
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
     st.session_state.skip_flags.pop(selected, None)
 
-    # 3. Gerencia a fila de prioridade
     if status_text == 'Saída Temporária':
         if selected not in st.session_state.priority_return_queue: st.session_state.priority_return_queue.append(selected)
     elif selected in st.session_state.priority_return_queue: st.session_state.priority_return_queue.remove(selected)
 
-    # 4. Verifica o bastão se o portador saiu
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = False
     if was_holder: 
         baton_changed = check_and_assume_baton()
     
     if not baton_changed: 
-        save_state() # Salva o estado GLOBAL
-    # <-- MODIFICADO: st.rerun() removido -->
-
+        save_state() 
+        
+    if baton_changed: # <-- MODIFICADO: Se o bastão mudou, toca som
+        st.rerun()
 
 def manual_rerun():
     print('CALLBACK MANUAL RERUN')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
-    st.session_state.lunch_warning_info = None # Limpa aviso global
-    st.rerun() # <-- ÚNICO st.rerun() necessário
+    st.session_state.lunch_warning_info = None 
+    st.rerun() 
 
 # ============================================
 # 4. EXECUÇÃO PRINCIPAL DO STREAMLIT APP
@@ -519,48 +502,41 @@ def manual_rerun():
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
 # <-- MODIFICADO: Linha que esconde alertas removida -->
 # st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True) 
-# O estado é carregado aqui do cache global
 init_session_state()
 
-# --- Scroll para o Topo (CORRIGIDO) ---
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
-# --- Fim Scroll para o Topo ---
 
 st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')
 st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
 
-# <-- MODIFICADO: Lógica de Auto Refresh e Elementos Temporizados -->
 gif_start_time = st.session_state.get('rotation_gif_start_time')
-lunch_warning_info = st.session_state.get('lunch_warning_info') # Lê o aviso (agora global)
+lunch_warning_info = st.session_state.get('lunch_warning_info') 
 
 show_gif = False
 show_lunch_warning = False
-refresh_interval = 40000 # Padrão: 40 segundos
+refresh_interval = 40000 
 
-# Verifica GIF de Rotação
 if gif_start_time:
     try:
         elapsed = (datetime.now() - gif_start_time).total_seconds()
         if elapsed < 20: 
             show_gif = True
-            refresh_interval = 2000 # 2 segundos durante a animação
+            refresh_interval = 2000 
         else: 
             st.session_state.rotation_gif_start_time = None
-            save_state() # Salva a limpeza do GIF
+            save_state() 
     except: 
         st.session_state.rotation_gif_start_time = None
         
-# Verifica GIF de Aviso de Almoço (lendo do estado global)
 if lunch_warning_info and lunch_warning_info.get('start_time'):
     try:
         elapsed_lunch = (datetime.now() - lunch_warning_info['start_time']).total_seconds()
-        if elapsed_lunch < 30: # 30 segundos de aviso
+        if elapsed_lunch < 30: 
             show_lunch_warning = True
-            refresh_interval = 2000 # Força refresh rápido para o timer funcionar
+            refresh_interval = 2000 
         else:
-            # Limpa o aviso se ele expirou (auto-correção)
             st.session_state.lunch_warning_info = None 
-            save_state() # Salva o estado limpo
+            save_state() 
     except Exception as e:
         print(f"Erro ao processar timer do aviso de almoço: {e}")
         st.session_state.lunch_warning_info = None
@@ -568,18 +544,17 @@ if lunch_warning_info and lunch_warning_info.get('start_time'):
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 
 if st.session_state.get('play_sound', False):
-    st.components.v1.html(play_sound_html(), height=0, width=0); st.session_state.play_sound = False
+    st.components.v1.html(play_sound_html(), height=0, width=0)
+    st.session_state.play_sound = False # <-- Som é resetado após tocar
+
 if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 
-# <-- MODIFICADO: Renderiza o Aviso de Almoço (se ativo) -->
 if show_lunch_warning:
     st.warning(f"🔔 **{lunch_warning_info['message']}**")
     st.image(GIF_URL_LUNCH_WARNING, width=200)
 
 if st.session_state.get('gif_warning', False):
     st.error('🚫 Ação inválida! Verifique as regras.'); st.image(GIF_URL_WARNING, width=150)
-
-# Garantir Assunção Inicial
 
 # Layout
 col_principal, col_disponibilidade = st.columns([1.5, 1])
@@ -591,7 +566,6 @@ proximo_index = find_next_holder_index(current_index, queue, skips)
 proximo = queue[proximo_index] if proximo_index != -1 else None
 restante = []
 if proximo_index != -1: 
-# ... (código mantido)
     num_q = len(queue)
     start_check_idx = (proximo_index + 1) % num_q
     current_check_idx = start_check_idx
@@ -609,7 +583,6 @@ if proximo_index != -1:
 
 # --- Coluna Principal ---
 with col_principal:
-# ... (código mantido)
     st.header("Responsável pelo Bastão")
     _, col_time = st.columns([0.25, 0.75])
     duration = timedelta()
@@ -672,7 +645,6 @@ with col_principal:
 
 # --- Coluna Disponibilidade ---
 with col_disponibilidade:
-# ... (código mantido)
     st.header('Status dos Consultores')
     st.markdown('Marque/Desmarque para entrar/sair.')
     ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'ausente': [], 'sessao': [], 'indisponivel': []}
@@ -684,7 +656,7 @@ with col_disponibilidade:
         if status == 'Bastão': 
             ui_lists['fila'].insert(0, nome)
         elif status == '': 
-            ui_lists['fila'].append(nome) # Status '' (vazio) significa 'Aguardando'
+            ui_lists['fila'].append(nome) 
         elif status == 'Atividade': 
             ui_lists['atividade'].append(nome)
         elif status == 'Almoço': 
