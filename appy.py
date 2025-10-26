@@ -4,9 +4,10 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
+import traceback # Para depuração de erros
 
 # --- Constantes de Consultores ---
 CONSULTORES = sorted([
@@ -42,7 +43,8 @@ def get_global_state_cache():
         'bastao_counts': {nome: 0 for nome in CONSULTORES},
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
-        'lunch_warning_info': None, # Aviso de almoço Global
+        'lunch_warning_info': None, 
+        'status_transitions': [], # <-- MODIFICADO: Lista para armazenar transições
     }
 
 # --- Constantes ---
@@ -51,6 +53,8 @@ CHAT_WEBHOOK_BASTAO = ""
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
+# Lista expandida para incluir estados "implícitos" para o relatório
+ALL_STATUSES_FOR_REPORT = ['Bastão', '', 'Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão', 'Indisponível'] 
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
@@ -62,10 +66,16 @@ SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/r
 # ============================================
 
 def date_serializer(obj):
-    if isinstance(obj, datetime): return obj.isoformat()
+    if isinstance(obj, (datetime, date)): 
+        return obj.isoformat()
+    elif isinstance(obj, timedelta):
+        # Serializa timedelta como segundos totais para consistência
+        return obj.total_seconds() 
     return str(obj)
 
+# --- FUNÇÃO `save_state` (GLOBAL) ---
 def save_state():
+    """Salva o estado da sessão LOCAL (st.session_state) no estado GLOBAL (Cache)."""
     global_data = get_global_state_cache()
     try:
         global_data['status_texto'] = st.session_state.status_texto.copy()
@@ -78,14 +88,21 @@ def save_state():
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
         global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') 
+        global_data['status_transitions'] = st.session_state.status_transitions.copy() # <-- MODIFICADO: Salva transições
+
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
         print(f'Erro ao salvar estado GLOBAL: {e}')
+        # Adiciona traceback para mais detalhes em caso de erro
+        # traceback.print_exc() 
 
+# --- FUNÇÃO `load_state` (GLOBAL) ---
 def load_state():
+    """Carrega o estado GLOBAL (Cache) e retorna para a sessão LOCAL."""
     global_data = get_global_state_cache()
     loaded_data = {k: v for k, v in global_data.items()}
     return loaded_data
+# --- FIM DAS MUDANÇAS DE PERSISTÊNCIA ---
 
 def send_chat_notification_internal(consultor, status):
     # (Código mantido)
@@ -103,38 +120,135 @@ def send_chat_notification_internal(consultor, status):
             return False
     return False
 
-
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
-def load_logs(): return [] 
-def save_logs(l): pass 
+def load_logs(): return [] # Mantido, mas não usado diretamente pelo relatório
+def save_logs(l): pass # Mantido, mas não usado diretamente pelo relatório
 
+# <-- MODIFICADO: Adiciona a transição à lista global -->
 def log_status_change(consultor, old_status, new_status, duration):
-    print(f'LOG: {consultor} de "{old_status or "-"}" para "{new_status or "-"}" após {duration}')
-    if not isinstance(duration, timedelta): duration = timedelta(0)
-    if consultor not in st.session_state.current_status_starts:
-        st.session_state.current_status_starts[consultor] = datetime.now()
+    """Registra a mudança de status e a adiciona à lista de transições."""
+    print(f'LOG: {consultor} de "{old_status or "Inicio"}" para "{new_status or "Disponível"}" após {duration}')
+    
+    # Garante que a duração seja timedelta
+    if not isinstance(duration, timedelta): 
+        duration = timedelta(0)
+        
+    # Garante que a lista de transições exista na sessão
+    if 'status_transitions' not in st.session_state:
+        st.session_state.status_transitions = []
+
+    # Cria a entrada de log/transição
+    transition_entry = {
+        'timestamp': datetime.now(),
+        'consultor': consultor,
+        'previous_status': old_status if old_status is not None else 'Inicio', # Status anterior ('Inicio' se for o primeiro)
+        'current_status': new_status if new_status is not None else 'Disponível', # Status atual ('Disponível' se limpou)
+        'duration': duration.total_seconds() # Armazena como segundos para facilitar
+    }
+    
+    # Adiciona à lista local
+    st.session_state.status_transitions.append(transition_entry)
+    
+    # Atualiza o tempo de início do novo status
     st.session_state.current_status_starts[consultor] = datetime.now()
+    
+    # Salva o estado global imediatamente para persistir a transição
+    save_state() 
 
-
-def format_time_duration(duration):
-    if not isinstance(duration, timedelta): return '--:--:--'
-    s = int(duration.total_seconds()); h, s = divmod(s, 3600); m, s = divmod(s, 60)
+def format_time_duration(duration_obj):
+    """Formata um objeto timedelta ou um número de segundos."""
+    if isinstance(duration_obj, timedelta):
+        s = int(duration_obj.total_seconds())
+    elif isinstance(duration_obj, (int, float)):
+        s = int(duration_obj)
+    else:
+        return '--:--:--'
+        
+    if s < 0: s = 0 # Evita tempos negativos
+    h, remainder = divmod(s, 3600)
+    m, s = divmod(remainder, 60)
     return f'{h:02}:{m:02}:{s:02}'
 
-def send_daily_report(): 
-    # (Código mantido)
+# <-- MODIFICADO: Processa transições e contagens para o relatório -->
+def send_daily_report():
     print("Tentando enviar backup diário...")
-    logs = load_logs() 
-    today_str = datetime.now().date().isoformat()
-    report_data = [{'consultor': 'Exemplo', 'old_status': 'Bastão', 'duration_s': 3600}] 
+    today = date.today()
+    today_str = today.isoformat()
 
-    if not report_data or not GOOGLE_CHAT_WEBHOOK_BACKUP:
-        print(f"Backup não enviado. Dados: {bool(report_data)}, Webhook: {bool(GOOGLE_CHAT_WEBHOOK_BACKUP)}")
+    # Pega dados do estado da sessão
+    bastao_counts = st.session_state.get('bastao_counts', {}).copy()
+    transitions = st.session_state.get('status_transitions', []).copy()
+
+    if not GOOGLE_CHAT_WEBHOOK_BACKUP:
+        print("Backup não enviado. Webhook não configurado.")
         st.session_state['report_last_run_date'] = datetime.now()
-        save_state()
+        # Não precisa salvar estado aqui
         return
 
-    report_text = f"📊 **Backup Diário de Status - {today_str}**\n\n(Detalhes do processamento de logs omitidos)"
+    # Filtra transições de hoje
+    today_transitions = [
+        t for t in transitions 
+        if isinstance(t.get('timestamp'), datetime) and t['timestamp'].date() == today
+    ]
+
+    # Calcula durações totais por status
+    total_durations = {consultor: {status: 0.0 for status in ALL_STATUSES_FOR_REPORT} for consultor in CONSULTORES}
+    
+    if not today_transitions:
+        print("Nenhuma transição registrada hoje para calcular durações.")
+    else:
+        for t in today_transitions:
+            consultor = t.get('consultor')
+            prev_status = t.get('previous_status')
+            duration_seconds = t.get('duration', 0.0)
+            
+            # Mapeia status vazio ('') para 'Disponível' para clareza no relatório
+            report_status = prev_status if prev_status != '' else 'Disponível' 
+            
+            if consultor in total_durations and report_status in total_durations[consultor]:
+                total_durations[consultor][report_status] += duration_seconds
+            else:
+                 print(f"Aviso: Consultor '{consultor}' ou status '{report_status}' não encontrado na inicialização de durações.")
+
+
+    # Formata o relatório
+    report_text = f"📊 **Backup Diário - {today_str}**\n\n"
+
+    # Seção Contagem de Bastão
+    report_text += "**Contagem de Bastão Recebido:**\n"
+    if not bastao_counts or all(count == 0 for count in bastao_counts.values()):
+        report_text += "_Nenhuma passagem registrada._\n"
+    else:
+        sorted_counts = sorted(bastao_counts.items())
+        for consultor, count in sorted_counts:
+            if count > 0:
+                 report_text += f"- {consultor}: {count} vez{'es' if count > 1 else ''}\n"
+    report_text += "\n"
+
+    # Seção Duração nos Status
+    report_text += "**Tempo Total Aproximado por Status (HH:MM:SS):**\n"
+    if not today_transitions:
+         report_text += "_Nenhuma atividade registrada para calcular durações._\n"
+    else:
+        for consultor in CONSULTORES:
+            consultor_report = f"- **{consultor}:** "
+            parts = []
+            for status in ALL_STATUSES_FOR_REPORT:
+                 # Renomeia '' para 'Disponível' no relatório
+                 display_status = status if status != '' else 'Disponível'
+                 if display_status == 'Inicio': continue # Ignora estado inicial
+                 
+                 duration_seconds = total_durations[consultor].get(display_status, 0.0)
+                 # Apenas mostra status onde o tempo foi > 0
+                 if duration_seconds > 0:
+                     parts.append(f"{display_status}: {format_time_duration(duration_seconds)}")
+            
+            if parts: # Apenas adiciona linha se houve alguma atividade
+                 report_text += consultor_report + ", ".join(parts) + "\n"
+            # else: # Opcional: Linha para quem não teve atividade
+            #      report_text += f"- **{consultor}:** _Sem atividade registrada._\n"
+
+
     chat_message = {'text': report_text}
     print(f"Enviando backup para: {GOOGLE_CHAT_WEBHOOK_BACKUP}")
     try:
@@ -142,11 +256,21 @@ def send_daily_report():
         response.raise_for_status()
         st.session_state['report_last_run_date'] = datetime.now()
         print("Backup diário enviado com sucesso.")
-        save_state()
+        
+        # LIMPA os dados para o próximo dia
+        st.session_state.bastao_counts = {nome: 0 for nome in CONSULTORES}
+        st.session_state.status_transitions = []
+        save_state() # Salva o estado limpo
+        
     except requests.exceptions.RequestException as e:
         print(f'Erro ao enviar backup diário: {e}')
         if e.response is not None:
             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
+            
+    except Exception as e_general: # Captura outros erros potenciais
+         print(f"Erro inesperado ao processar ou enviar relatório: {e_general}")
+         # traceback.print_exc() # Descomente para depuração
+
 
 def init_session_state():
     """Inicializa/sincroniza o st.session_state com o estado GLOBAL do cache."""
@@ -156,9 +280,10 @@ def init_session_state():
         'bastao_start_time': None, 
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
-        'play_sound': False, # Flag local
-        'gif_warning': False, # Flag local
-        'lunch_warning_info': None # Carrega global
+        'play_sound': False, 
+        'gif_warning': False, 
+        'lunch_warning_info': None,
+        # 'just_received_baton' foi removido, não é mais necessário
     }
 
     # Sincroniza as variáveis simples
@@ -175,6 +300,7 @@ def init_session_state():
     st.session_state['skip_flags'] = persisted_state.get('skip_flags', {}).copy()
     st.session_state['status_texto'] = persisted_state.get('status_texto', {}).copy()
     st.session_state['current_status_starts'] = persisted_state.get('current_status_starts', {}).copy()
+    st.session_state['status_transitions'] = persisted_state.get('status_transitions', []).copy() # <-- Carrega transições
 
     # Garante consultores e sincroniza checkboxes
     for nome in CONSULTORES:
@@ -198,90 +324,9 @@ def init_session_state():
     check_and_assume_baton()
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
 
-def find_next_holder_index(current_index, queue, skips):
-    # (Código mantido)
-    if not queue: return -1
-    num_consultores = len(queue)
-    if num_consultores == 0: return -1
-    if current_index >= num_consultores or current_index < -1: current_index = -1
-
-    next_idx = (current_index + 1) % num_consultores
-    attempts = 0
-    while attempts < num_consultores:
-        consultor = queue[next_idx]
-        if not skips.get(consultor, False) and st.session_state.get(f'check_{consultor}'):
-            return next_idx
-        next_idx = (next_idx + 1) % num_consultores
-        attempts += 1
-    print("AVISO: find_next_holder_index não encontrou ninguém elegível.")
-    return -1
-
-
-# <-- MODIFICADO: Ativa o som ao assumir -->
-def check_and_assume_baton():
-    print('--- VERIFICA E ASSUME BASTÃO ---')
-    queue = st.session_state.bastao_queue
-    skips = st.session_state.skip_flags
-    current_holder_status = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
-    is_current_valid = (current_holder_status
-                        and current_holder_status in queue
-                        and st.session_state.get(f'check_{current_holder_status}'))
-
-    first_eligible_index = find_next_holder_index(-1, queue, skips)
-    first_eligible_holder = queue[first_eligible_index] if first_eligible_index != -1 else None
-
-    should_have_baton = None
-    if is_current_valid:
-        should_have_baton = current_holder_status
-    elif first_eligible_holder:
-        should_have_baton = first_eligible_holder
-
-    changed = False
-    previous_holder = current_holder_status 
-
-    for c in CONSULTORES:
-        if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
-            print(f'Limpando bastão de {c} (não deveria ter)')
-            duration = datetime.now() - st.session_state.current_status_starts.get(c, datetime.now())
-            log_status_change(c, 'Bastão', 'Indisponível', duration)
-            st.session_state.status_texto[c] = 'Indisponível'
-            changed = True
-
-    if should_have_baton and st.session_state.status_texto.get(should_have_baton) != 'Bastão':
-        print(f'Atribuindo bastão para {should_have_baton}')
-        old_status = st.session_state.status_texto.get(should_have_baton, '')
-        duration = datetime.now() - st.session_state.current_status_starts.get(should_have_baton, datetime.now())
-        log_status_change(should_have_baton, old_status, 'Bastão', duration)
-        st.session_state.status_texto[should_have_baton] = 'Bastão'
-        st.session_state.bastao_start_time = datetime.now()
-        if previous_holder != should_have_baton: 
-            st.session_state.play_sound = True # <-- Toca som na assunção
-            print("SOUND TRIGGER: check_and_assume_baton assigned baton.")
-            send_chat_notification_internal(should_have_baton, 'Bastão') 
-        if st.session_state.skip_flags.get(should_have_baton):
-            print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
-            st.session_state.skip_flags[should_have_baton] = False
-        changed = True
-    elif not should_have_baton:
-        if current_holder_status:
-            print(f'Ninguém elegível, limpando bastão de {current_holder_status}')
-            duration = datetime.now() - st.session_state.current_status_starts.get(current_holder_status, datetime.now())
-            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) 
-            st.session_state.status_texto[current_holder_status] = 'Indisponível' 
-            changed = True
-        if st.session_state.bastao_start_time is not None: changed = True
-        st.session_state.bastao_start_time = None
-
-    if changed: 
-        print('Estado do bastão mudou. Salvando GLOBAL.')
-        save_state()
-    return changed
-
-# ============================================
-# 3. FUNÇÕES DE CALLBACK GLOBAIS
-# ============================================
 
 def update_queue(consultor):
+    # (Código mantido, sem st.rerun())
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     st.session_state.lunch_warning_info = None 
@@ -292,7 +337,7 @@ def update_queue(consultor):
     duration = datetime.now() - st.session_state.current_status_starts.get(consultor, datetime.now())
 
     if is_checked: 
-        log_status_change(consultor, old_status_text or 'Indisponível', '', duration)
+        log_status_change(consultor, old_status_text or 'Indisponível', '', duration) # <-- Chama log_status_change
         st.session_state.status_texto[consultor] = '' 
         if consultor not in st.session_state.bastao_queue:
             st.session_state.bastao_queue.append(consultor) 
@@ -304,9 +349,12 @@ def update_queue(consultor):
     else: 
         if old_status_text not in STATUSES_DE_SAIDA and old_status_text != 'Bastão':
             log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
-            log_status_change(consultor, log_old_status , 'Indisponível', duration)
+            log_status_change(consultor, log_old_status , 'Indisponível', duration) # <-- Chama log_status_change
             st.session_state.status_texto[consultor] = 'Indisponível' 
-        
+        else: # Se já estava em Saída ou Bastão, loga a transição para 'Indisponível' (desmarcado manualmente)
+             log_status_change(consultor, old_status_text , 'Indisponível', duration) # <-- Chama log_status_change
+             st.session_state.status_texto[consultor] = 'Indisponível' 
+
         if consultor in st.session_state.bastao_queue:
             st.session_state.bastao_queue.remove(consultor)
             print(f'Removido {consultor} da fila.')
@@ -314,10 +362,11 @@ def update_queue(consultor):
         
     baton_changed = check_and_assume_baton() # Pode tocar som aqui dentro
     if not baton_changed:
+        # Se o bastão não mudou, mas o estado sim, precisamos salvar
         save_state()
 
-# <-- MODIFICADO: Ativa o som ao passar -->
 def rotate_bastao(): 
+    # (Código mantido, toca som diretamente)
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -362,10 +411,10 @@ def rotate_bastao():
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
         
-        log_status_change(current_holder, 'Bastão', '', duration)
+        log_status_change(current_holder, 'Bastão', '', duration) # <-- Chama log_status_change
         st.session_state.status_texto[current_holder] = '' 
         
-        log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
+        log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0)) # <-- Chama log_status_change
         st.session_state.status_texto[next_holder] = 'Bastão'
         
         st.session_state.bastao_start_time = datetime.now()
@@ -375,13 +424,14 @@ def rotate_bastao():
         print("SOUND TRIGGER: rotate_bastao successful.")
         st.session_state.rotation_gif_start_time = datetime.now()
         
-        save_state()
+        # save_state() é chamado dentro de log_status_change
     else:
         print('Ninguém elegível. Forçando re-check e mantendo estado atual.')
         st.warning('Não há próximo consultor elegível na fila no momento.')
         check_and_assume_baton() 
 
 def toggle_skip(): 
+    # (Código mantido, sem st.rerun())
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -398,13 +448,14 @@ def toggle_skip():
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
-        save_state() 
+        save_state() # Salva a flag de skip antes de chamar rotate
         rotate_bastao() # Pode tocar som aqui dentro
         return 
 
     save_state() 
 
 def update_status(status_text, change_to_available): 
+    # (Código mantido, chama log_status_change)
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -437,7 +488,6 @@ def update_status(status_text, change_to_available):
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
-                # Mensagem simplificada
                 'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos já em almoço. Clique novamente em "Almoço" para confirmar.'
             }
             save_state() 
@@ -449,7 +499,10 @@ def update_status(status_text, change_to_available):
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
-    log_status_change(selected, old_status, status_text, duration)
+    
+    # Loga a mudança ANTES de mudar o status_texto
+    log_status_change(selected, old_status, status_text, duration) # <-- Chama log_status_change
+    
     st.session_state.status_texto[selected] = status_text 
 
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
@@ -464,8 +517,12 @@ def update_status(status_text, change_to_available):
     if was_holder: 
         baton_changed = check_and_assume_baton() # Pode tocar som aqui dentro
     
-    if not baton_changed: 
+    # save_state() é chamado dentro de log_status_change e check_and_assume_baton
+    # então não é estritamente necessário aqui, a menos que NENHUMA das duas
+    # condições acima seja verdadeira, o que é raro. Adicionar por segurança.
+    if not baton_changed and not was_holder:
         save_state() 
+
 
 def manual_rerun():
     print('CALLBACK MANUAL RERUN')
@@ -686,7 +743,14 @@ with col_disponibilidade:
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
-    if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()):
+    # Verifica se deve enviar o relatório diário
+    now = datetime.now()
+    last_run_dt = st.session_state.report_last_run_date
+    # Garante que last_run_dt seja datetime para comparação segura
+    if not isinstance(last_run_dt, datetime):
+        last_run_dt = datetime.min
+        
+    if now.hour >= 20 and now.date() > last_run_dt.date():
         send_daily_report()
 
 print('--- FIM DO RENDER ---')
