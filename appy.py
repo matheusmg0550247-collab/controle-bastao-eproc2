@@ -165,7 +165,7 @@ def init_session_state():
 
     # Sincroniza as variáveis simples
     for key, default in defaults.items():
-        st.session_state[key] = persisted_state.get(key, default) # <-- MODIFICADO: Sincroniza o valor, não 'setdefault'
+        st.session_state[key] = persisted_state.get(key, default)
 
     # Sincroniza as coleções de estado (listas e dicionários)
     st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
@@ -314,8 +314,7 @@ def update_queue(consultor):
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
-    st.rerun()
-
+    # <-- MODIFICADO: st.rerun() removido -->
 
 def rotate_bastao(): 
     """Ação 'Passar' que lida com a rotação e o reset do ciclo."""
@@ -330,14 +329,13 @@ def rotate_bastao():
     current_holder = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
     if selected != current_holder:
         st.session_state.gif_warning = True
-        st.rerun()
-        return
+        return # <-- MODIFICADO: st.rerun() removido -->
 
     current_index = -1
     try: current_index = queue.index(current_holder)
     except ValueError:
         st.warning(f'Erro interno: Portador {current_holder} não encontrado na fila. Tentando corrigir.')
-        if check_and_assume_baton(): st.rerun()
+        if check_and_assume_baton(): pass # <-- MODIFICADO: st.rerun() removido -->
         return
 
     # --- LÓGICA DE RESET ---
@@ -388,11 +386,9 @@ def rotate_bastao():
         st.warning('Não há próximo consultor elegível na fila no momento.')
         check_and_assume_baton() 
         
-    st.rerun()
-
+    # <-- MODIFICADO: st.rerun() removido -->
 
 def toggle_skip(): 
-# ... (Função mantida)
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -410,21 +406,20 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() 
+        rotate_bastao() # Chama o rotate_bastao (que não tem mais rerun)
         return 
 
     save_state() 
-    st.rerun()
+    # <-- MODIFICADO: st.rerun() removido -->
 
-
-# <-- MODIFICADO: Esta é a função central com a lógica CORRIGIDA -->
+# <-- MODIFICADO: Função com lógica de 2 cliques e cálculo de Pool Ativo CORRIGIDO -->
 def update_status(status_text, change_to_available): 
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     if not selected or selected == 'Selecione um nome': 
         st.warning('Selecione um consultor.')
-        return # <-- Adicionado 'return' que faltava
+        return
 
     # --- INÍCIO DA LÓGICA DE AVISO/BLOQUEIO DE ALMOÇO (Global) ---
     
@@ -448,6 +443,7 @@ def update_status(status_text, change_to_available):
         # Pool Ativo = Na Fila ('', 'Bastão') + Em Atividade ('Atividade')
         num_na_fila = sum(1 for s in all_statuses.values() if s == '' or s == 'Bastão')
         num_atividade = sum(1 for s in all_statuses.values() if s == 'Atividade')
+        # Precisamos incluir o 'selected' que está prestes a sair para almoço no pool
         total_ativos = num_na_fila + num_atividade
         
         # 3b. Contar quem já está em almoço
@@ -507,22 +503,21 @@ def update_status(status_text, change_to_available):
     
     if not baton_changed: 
         save_state() # Salva o estado GLOBAL
-    st.rerun()
+    # <-- MODIFICADO: st.rerun() removido -->
 
 
 def manual_rerun():
-# ... (Função mantida)
     print('CALLBACK MANUAL RERUN')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     st.session_state.lunch_warning_info = None # Limpa aviso global
-    st.rerun()
+    st.rerun() # <-- ÚNICO st.rerun() necessário
 
 # ============================================
 # 4. EXECUÇÃO PRINCIPAL DO STREAMLIT APP
 # ============================================
 
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
-# <-- MODIFICADO: Removida a linha que esconde os alertas -->
+# <-- MODIFICADO: Linha que esconde alertas removida -->
 # st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True) 
 # O estado é carregado aqui do cache global
 init_session_state()
