@@ -7,6 +7,7 @@ import requests
 from datetime import datetime, timedelta
 from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
+import json # Usado para serialização de logs
 
 # --- Constantes de Consultores ---
 CONSULTORES = sorted([
@@ -43,11 +44,13 @@ def get_global_state_cache():
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
         'lunch_warning_info': None, # Aviso de almoço Global
+        'daily_logs': [] # <<< NOVO: Log persistente para o relatório
     }
 
 # --- Constantes ---
+# Webhook para o qual o relatório diário será enviado
 GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
-CHAT_WEBHOOK_BASTAO = ""
+CHAT_WEBHOOK_BASTAO = "" # Webhook para notificações de giro (mantido)
 BASTAO_EMOJI = "🌸"
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
@@ -62,10 +65,13 @@ SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/r
 # ============================================
 
 def date_serializer(obj):
+    """Serializador para objetos datetime (usado em logs)."""
     if isinstance(obj, datetime): return obj.isoformat()
+    if isinstance(obj, timedelta): return obj.total_seconds()
     return str(obj)
 
 def save_state():
+    """Salva o estado da sessão local (st.session_state) no cache GLOBAL."""
     global_data = get_global_state_cache()
     try:
         global_data['status_texto'] = st.session_state.status_texto.copy()
@@ -78,17 +84,48 @@ def save_state():
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
         global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') 
+        
+        # Serializa os logs para salvar no cache global
+        # É mais seguro serializar para evitar problemas de concorrência com objetos complexos
+        global_data['daily_logs'] = json.loads(json.dumps(st.session_state.daily_logs, default=date_serializer))
+        
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
     except Exception as e: 
         print(f'Erro ao salvar estado GLOBAL: {e}')
 
 def load_state():
+    """Carrega o estado do cache GLOBAL."""
     global_data = get_global_state_cache()
-    loaded_data = {k: v for k, v in global_data.items()}
+    
+    # Desserializa os logs
+    loaded_logs = global_data.get('daily_logs', [])
+    if loaded_logs and isinstance(loaded_logs[0], dict): # Já está no formato de dicionário
+         deserialized_logs = loaded_logs
+    else:
+        try: # Tenta desserializar se for JSON string
+            deserialized_logs = json.loads(loaded_logs)
+        except: # Falha, apenas usa a lista (pode ser lista de strings)
+            deserialized_logs = loaded_logs 
+    
+    # Converte durações de volta para timedelta
+    final_logs = []
+    for log in deserialized_logs:
+        if isinstance(log, dict):
+            if 'duration' in log and not isinstance(log['duration'], timedelta):
+                try: log['duration'] = timedelta(seconds=float(log['duration']))
+                except: log['duration'] = timedelta(0)
+            if 'timestamp' in log and isinstance(log['timestamp'], str):
+                try: log['timestamp'] = datetime.fromisoformat(log['timestamp'])
+                except: log['timestamp'] = datetime.min
+            final_logs.append(log)
+
+    loaded_data = {k: v for k, v in global_data.items() if k != 'daily_logs'}
+    loaded_data['daily_logs'] = final_logs
+    
     return loaded_data
 
 def send_chat_notification_internal(consultor, status):
-    # (Código mantido)
+    """Envia notificação de giro do bastão (não o relatório)."""
     if CHAT_WEBHOOK_BASTAO and status == 'Bastão':
         message_template = "🎉 **BASTÃO GIRADO!** 🎉 \n\n- **Novo Responsável:** {consultor}\n- **Acesse o Painel:** {app_url}"
         message_text = message_template.format(consultor=consultor, app_url=APP_URL_CLOUD) 
@@ -105,48 +142,139 @@ def send_chat_notification_internal(consultor, status):
 
 
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
-def load_logs(): return [] 
-def save_logs(l): pass 
 
+# <-- MODIFICADO: Lê logs do session_state -->
+def load_logs(): 
+    """Carrega logs do st.session_state local."""
+    return st.session_state.get('daily_logs', []).copy()
+
+# <-- MODIFICADO: Salva logs no session_state -->
+def save_logs(l): 
+    """Salva logs no st.session_state local."""
+    st.session_state.daily_logs = l
+    # O save_state() será chamado pela função principal de callback
+
+# <-- MODIFICADO: Loga o evento no st.session_state.daily_logs -->
 def log_status_change(consultor, old_status, new_status, duration):
+    """Registra uma mudança de status na lista de logs da sessão."""
     print(f'LOG: {consultor} de "{old_status or "-"}" para "{new_status or "-"}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
+
+    # Cria a entrada de log
+    entry = {
+        'timestamp': datetime.now(),
+        'consultor': consultor,
+        'old_status': old_status, 
+        'new_status': new_status,
+        'duration': duration, # Objeto timedelta
+        'duration_s': duration.total_seconds() # Segundos (para serialização)
+    }
+    # Adiciona à lista de logs da sessão
+    st.session_state.daily_logs.append(entry)
+    
+    # Atualiza o tempo de início do novo status
     if consultor not in st.session_state.current_status_starts:
         st.session_state.current_status_starts[consultor] = datetime.now()
     st.session_state.current_status_starts[consultor] = datetime.now()
 
 
 def format_time_duration(duration):
+    """Formata um objeto timedelta para H:M:S."""
     if not isinstance(duration, timedelta): return '--:--:--'
     s = int(duration.total_seconds()); h, s = divmod(s, 3600); m, s = divmod(s, 60)
     return f'{h:02}:{m:02}:{s:02}'
 
+# <-- MODIFICADO: Função de relatório diário implementada -->
 def send_daily_report(): 
-    # (Código mantido)
-    print("Tentando enviar backup diário...")
+    """Agrega os logs e contagens e envia o relatório diário."""
+    print("Iniciando envio do relatório diário...")
+    
     logs = load_logs() 
-    today_str = datetime.now().date().isoformat()
-    report_data = [{'consultor': 'Exemplo', 'old_status': 'Bastão', 'duration_s': 3600}] 
+    bastao_counts = st.session_state.bastao_counts.copy()
+    
+    # 1. Agregar dados dos logs
+    aggregated_data = {nome: {} for nome in CONSULTORES}
+    
+    for log in logs:
+        try:
+            consultor = log['consultor']
+            status = log['old_status'] # Nos importa o status que terminou
+            duration = log.get('duration', timedelta(0))
+            
+            # Garante que a duração é um timedelta
+            if not isinstance(duration, timedelta):
+                try: duration = timedelta(seconds=float(duration))
+                except: duration = timedelta(0)
 
-    if not report_data or not GOOGLE_CHAT_WEBHOOK_BACKUP:
-        print(f"Backup não enviado. Dados: {bool(report_data)}, Webhook: {bool(GOOGLE_CHAT_WEBHOOK_BACKUP)}")
-        st.session_state['report_last_run_date'] = datetime.now()
-        save_state()
-        return
+            if status and consultor in aggregated_data: # Ignora status vazios
+                current_duration = aggregated_data[consultor].get(status, timedelta(0))
+                aggregated_data[consultor][status] = current_duration + duration
+        except Exception as e:
+            print(f"Erro ao processar log: {e} - Log: {log}")
 
-    report_text = f"📊 **Backup Diário de Status - {today_str}**\n\n(Detalhes do processamento de logs omitidos)"
+    # 2. Formatar o texto do relatório
+    today_str = datetime.now().strftime("%d/%m/%Y")
+    report_text = f"📊 **Relatório Diário de Atividades - {today_str}** 📊\n\n"
+    
+    consultores_com_dados = []
+
+    for nome in CONSULTORES:
+        counts = bastao_counts.get(nome, 0)
+        times = aggregated_data.get(nome, {})
+        bastao_time = times.get('Bastão', timedelta(0))
+        
+        # Só adiciona ao relatório se houver dados
+        if counts > 0 or times:
+            consultores_com_dados.append(nome)
+            report_text += f"**👤 {nome}**\n"
+            report_text += f"- 🌸 Bastão Recebido: **{counts}** vez(es)\n"
+            report_text += f"- ⏱️ Tempo com Bastão: **{format_time_duration(bastao_time)}**\n"
+            
+            other_statuses = []
+            # Ordena os status (exceto Bastão) para consistência
+            sorted_times = sorted(times.items(), key=itemgetter(0)) 
+            
+            for status, time in sorted_times:
+                if status != 'Bastão' and status: # Ignora 'Bastão' (já reportado) e vazios
+                    other_statuses.append(f"{status}: **{format_time_duration(time)}**")
+            
+            if other_statuses:
+                report_text += f"- ⏳ Outros Tempos: {', '.join(other_statuses)}\n\n"
+            else:
+                report_text += "\n" # Apenas adiciona espaço
+
+    # 3. Enviar o relatório
+    if not consultores_com_dados:
+        print("Relatório diário não enviado: Sem dados de atividade hoje.")
+        report_text = f"📊 **Relatório Diário - {today_str}** 📊\n\nNenhuma atividade registrada hoje."
+        # Mesmo assim, envia um aviso de "nada" e reseta.
+
+    if not GOOGLE_CHAT_WEBHOOK_BACKUP:
+        print("Webhook de backup não configurado. Relatório não enviado.")
+        return # Não reseta o estado se o webhook não estiver lá
+
     chat_message = {'text': report_text}
-    print(f"Enviando backup para: {GOOGLE_CHAT_WEBHOOK_BACKUP}")
+    print(f"Enviando relatório diário para o webhook...")
+    
     try:
         response = requests.post(GOOGLE_CHAT_WEBHOOK_BACKUP, json=chat_message)
-        response.raise_for_status()
+        response.raise_for_status() # Lança erro se o status for 4xx ou 5xx
+        
+        print("Relatório diário enviado com sucesso.")
+        
+        # 4. Resetar o estado para o próximo dia (APÓS SUCESSO)
         st.session_state['report_last_run_date'] = datetime.now()
-        print("Backup diário enviado com sucesso.")
-        save_state()
+        st.session_state['daily_logs'] = [] # Limpa os logs
+        st.session_state['bastao_counts'] = {nome: 0 for nome in CONSULTORES} # Reseta contagens
+        
+        print("Logs diários e contagens de bastão foram resetados.")
+        save_state() # Salva o estado resetado no GLOBAL
+
     except requests.exceptions.RequestException as e:
-        print(f'Erro ao enviar backup diário: {e}')
+        print(f'Erro ao enviar relatório diário: {e}')
         if e.response is not None:
             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
+        # NÃO reseta o estado se falhar, para tentar novamente na próxima vez.
 
 def init_session_state():
     """Inicializa/sincroniza o st.session_state com o estado GLOBAL do cache."""
@@ -175,6 +303,7 @@ def init_session_state():
     st.session_state['skip_flags'] = persisted_state.get('skip_flags', {}).copy()
     st.session_state['status_texto'] = persisted_state.get('status_texto', {}).copy()
     st.session_state['current_status_starts'] = persisted_state.get('current_status_starts', {}).copy()
+    st.session_state['daily_logs'] = persisted_state.get('daily_logs', []).copy() # <-- Sincroniza logs
 
     # Garante consultores e sincroniza checkboxes
     for nome in CONSULTORES:
@@ -199,7 +328,7 @@ def init_session_state():
     print('--- Estado Sincronizado (GLOBAL -> LOCAL) ---')
 
 def find_next_holder_index(current_index, queue, skips):
-    # (Código mantido)
+    """Encontra o próximo consultor elegível na fila."""
     if not queue: return -1
     num_consultores = len(queue)
     if num_consultores == 0: return -1
@@ -217,8 +346,8 @@ def find_next_holder_index(current_index, queue, skips):
     return -1
 
 
-# <-- MODIFICADO: Ativa o som ao assumir -->
 def check_and_assume_baton():
+    """Verifica o estado do bastão e o atribui/remove conforme necessário."""
     print('--- VERIFICA E ASSUME BASTÃO ---')
     queue = st.session_state.bastao_queue
     skips = st.session_state.skip_flags
@@ -243,7 +372,7 @@ def check_and_assume_baton():
         if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
             print(f'Limpando bastão de {c} (não deveria ter)')
             duration = datetime.now() - st.session_state.current_status_starts.get(c, datetime.now())
-            log_status_change(c, 'Bastão', 'Indisponível', duration)
+            log_status_change(c, 'Bastão', 'Indisponível', duration) # <-- Log
             st.session_state.status_texto[c] = 'Indisponível'
             changed = True
 
@@ -251,11 +380,11 @@ def check_and_assume_baton():
         print(f'Atribuindo bastão para {should_have_baton}')
         old_status = st.session_state.status_texto.get(should_have_baton, '')
         duration = datetime.now() - st.session_state.current_status_starts.get(should_have_baton, datetime.now())
-        log_status_change(should_have_baton, old_status, 'Bastão', duration)
+        log_status_change(should_have_baton, old_status, 'Bastão', duration) # <-- Log
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
         if previous_holder != should_have_baton: 
-            st.session_state.play_sound = True # <-- Toca som na assunção
+            st.session_state.play_sound = True 
             print("SOUND TRIGGER: check_and_assume_baton assigned baton.")
             send_chat_notification_internal(should_have_baton, 'Bastão') 
         if st.session_state.skip_flags.get(should_have_baton):
@@ -266,7 +395,7 @@ def check_and_assume_baton():
         if current_holder_status:
             print(f'Ninguém elegível, limpando bastão de {current_holder_status}')
             duration = datetime.now() - st.session_state.current_status_starts.get(current_holder_status, datetime.now())
-            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) 
+            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) # <-- Log
             st.session_state.status_texto[current_holder_status] = 'Indisponível' 
             changed = True
         if st.session_state.bastao_start_time is not None: changed = True
@@ -282,6 +411,7 @@ def check_and_assume_baton():
 # ============================================
 
 def update_queue(consultor):
+    """Callback: Checkbox de disponibilidade (entrar/sair da fila)."""
     print(f'CALLBACK UPDATE QUEUE: {consultor}')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     st.session_state.lunch_warning_info = None 
@@ -292,7 +422,7 @@ def update_queue(consultor):
     duration = datetime.now() - st.session_state.current_status_starts.get(consultor, datetime.now())
 
     if is_checked: 
-        log_status_change(consultor, old_status_text or 'Indisponível', '', duration)
+        log_status_change(consultor, old_status_text or 'Indisponível', '', duration) # <-- Log
         st.session_state.status_texto[consultor] = '' 
         if consultor not in st.session_state.bastao_queue:
             st.session_state.bastao_queue.append(consultor) 
@@ -304,7 +434,7 @@ def update_queue(consultor):
     else: 
         if old_status_text not in STATUSES_DE_SAIDA and old_status_text != 'Bastão':
             log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
-            log_status_change(consultor, log_old_status , 'Indisponível', duration)
+            log_status_change(consultor, log_old_status , 'Indisponível', duration) # <-- Log
             st.session_state.status_texto[consultor] = 'Indisponível' 
         
         if consultor in st.session_state.bastao_queue:
@@ -312,12 +442,12 @@ def update_queue(consultor):
             print(f'Removido {consultor} da fila.')
         st.session_state.skip_flags.pop(consultor, None) 
         
-    baton_changed = check_and_assume_baton() # Pode tocar som aqui dentro
+    baton_changed = check_and_assume_baton() 
     if not baton_changed:
         save_state()
 
-# <-- MODIFICADO: Ativa o som ao passar -->
 def rotate_bastao(): 
+    """Callback: Botão 'Passar'."""
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -362,16 +492,19 @@ def rotate_bastao():
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
         
-        log_status_change(current_holder, 'Bastão', '', duration)
+        log_status_change(current_holder, 'Bastão', '', duration) # <-- Log
         st.session_state.status_texto[current_holder] = '' 
         
-        log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
+        log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0)) # <-- Log
         st.session_state.status_texto[next_holder] = 'Bastão'
         
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False 
+        
+        # <-- MODIFICADO: Contagem de bastão -->
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
-        st.session_state.play_sound = True # <-- Toca som na passagem
+        
+        st.session_state.play_sound = True 
         print("SOUND TRIGGER: rotate_bastao successful.")
         st.session_state.rotation_gif_start_time = datetime.now()
         
@@ -382,6 +515,7 @@ def rotate_bastao():
         check_and_assume_baton() 
 
 def toggle_skip(): 
+    """Callback: Botão 'Pular'."""
     print('CALLBACK TOGGLE SKIP')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -399,12 +533,13 @@ def toggle_skip():
     if selected == current_holder and st.session_state.skip_flags[selected]:
         print(f'Portador {selected} se marcou para pular. Tentando passar o bastão...')
         save_state() 
-        rotate_bastao() # Pode tocar som aqui dentro
+        rotate_bastao() 
         return 
 
     save_state() 
 
 def update_status(status_text, change_to_available): 
+    """Callback: Botões de Ação (Atividade, Almoço, etc.)."""
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -418,9 +553,9 @@ def update_status(status_text, change_to_available):
     current_lunch_warning = st.session_state.get('lunch_warning_info')
     is_second_try = False
     if current_lunch_warning and current_lunch_warning.get('consultor') == selected:
-         elapsed = (datetime.now() - current_lunch_warning.get('start_time', datetime.min)).total_seconds()
-         if elapsed < 30:
-             is_second_try = True 
+        elapsed = (datetime.now() - current_lunch_warning.get('start_time', datetime.min)).total_seconds()
+        if elapsed < 30:
+            is_second_try = True 
 
     if status_text == 'Almoço' and not is_second_try:
         all_statuses = st.session_state.status_texto
@@ -437,7 +572,6 @@ def update_status(status_text, change_to_available):
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
-                # Mensagem simplificada
                 'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos já em almoço. Clique novamente em "Almoço" para confirmar.'
             }
             save_state() 
@@ -449,7 +583,8 @@ def update_status(status_text, change_to_available):
     was_holder = next((True for c, s in st.session_state.status_texto.items() if s == 'Bastão' and c == selected), False)
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
-    log_status_change(selected, old_status, status_text, duration)
+    
+    log_status_change(selected, old_status, status_text, duration) # <-- Log
     st.session_state.status_texto[selected] = status_text 
 
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
@@ -462,12 +597,13 @@ def update_status(status_text, change_to_available):
     print(f'... Fila: {st.session_state.bastao_queue}, Skips: {st.session_state.skip_flags}')
     baton_changed = False
     if was_holder: 
-        baton_changed = check_and_assume_baton() # Pode tocar som aqui dentro
+        baton_changed = check_and_assume_baton() 
     
     if not baton_changed: 
         save_state() 
 
 def manual_rerun():
+    """Callback: Botão 'Atualizar (Manual)'."""
     print('CALLBACK MANUAL RERUN')
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
     st.session_state.lunch_warning_info = None 
@@ -478,7 +614,6 @@ def manual_rerun():
 # ============================================
 
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
-# Linha que esconde alertas removida 
 init_session_state()
 
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
@@ -520,10 +655,9 @@ if lunch_warning_info and lunch_warning_info.get('start_time'):
             
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 
-# <-- MODIFICADO: Lógica de som simplificada -->
 if st.session_state.get('play_sound', False):
     st.components.v1.html(play_sound_html(), height=0, width=0)
-    st.session_state.play_sound = False # Reseta o som após renderizar
+    st.session_state.play_sound = False 
 
 if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 
@@ -686,7 +820,12 @@ with col_disponibilidade:
     render_section('Saída', '🚶', ui_lists['saida'], 'red')
     render_section('Indisponível', '❌', ui_lists['indisponivel'], 'grey')
 
-    if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()):
-        send_daily_report()
+# --- Lógica de Relatório Diário ---
+now = datetime.now()
+# Pega a data da última execução (converte para data se for datetime, ou usa data mínima)
+last_run_date = st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()
 
-print('--- FIM DO RENDER ---')
+# Rodar o relatório uma vez por dia, a partir das 20h
+if now.hour >= 20 and now.date() > last_run_date:
+    print(f"TRIGGER: Enviando relatório diário. Agora: {now}, Última Execução: {st.session_state.report_last_run_date}")
+    send_daily_report()
