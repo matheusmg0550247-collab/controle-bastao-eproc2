@@ -71,13 +71,13 @@ def save_state():
     global_data = get_global_state_cache()
     
     try:
+        # Salva apenas os estados que realmente são compartilhados
         global_data['status_texto'] = st.session_state.status_texto.copy()
         global_data['bastao_queue'] = st.session_state.bastao_queue.copy()
         global_data['skip_flags'] = st.session_state.skip_flags.copy()
         global_data['current_status_starts'] = st.session_state.current_status_starts.copy()
         global_data['bastao_counts'] = st.session_state.bastao_counts.copy()
         global_data['priority_return_queue'] = st.session_state.priority_return_queue.copy()
-
         global_data['bastao_start_time'] = st.session_state.bastao_start_time
         global_data['report_last_run_date'] = st.session_state.report_last_run_date
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
@@ -91,6 +91,7 @@ def save_state():
 def load_state():
     """Carrega o estado GLOBAL (Cache) e retorna para a sessão LOCAL."""
     global_data = get_global_state_cache()
+    # Retorna uma cópia para evitar modificar o cache diretamente
     loaded_data = {k: v for k, v in global_data.items()}
     return loaded_data
 # --- FIM DAS MUDANÇAS DE PERSISTÊNCIA ---
@@ -117,7 +118,11 @@ def save_logs(l): pass # Implementação omitida
 def log_status_change(consultor, old_status, new_status, duration):
     print(f'LOG: {consultor} de "{old_status or "-"}" para "{new_status or "-"}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
+    # Garante que a chave existe antes de atribuir
+    if consultor not in st.session_state.current_status_starts:
+        st.session_state.current_status_starts[consultor] = datetime.now()
     st.session_state.current_status_starts[consultor] = datetime.now()
+
 
 def format_time_duration(duration):
     if not isinstance(duration, timedelta): return '--:--:--'
@@ -161,13 +166,13 @@ def init_session_state():
         'play_sound': False, 
         'gif_warning': False, 
         'lunch_warning_info': None,
-        'previous_responsavel': None # <-- MODIFICADO: Rastreia o responsável anterior
+        'just_received_baton': False # <-- MODIFICADO: Flag para controle do som
     }
 
     # Sincroniza as variáveis simples
     for key, default in defaults.items():
-        # Carrega o estado global, exceto 'previous_responsavel' que é sempre local
-        if key == 'previous_responsavel':
+        # Carrega o estado global, exceto flags locais como 'play_sound', 'gif_warning', 'just_received_baton'
+        if key in ['play_sound', 'gif_warning', 'just_received_baton']:
             st.session_state.setdefault(key, default)
         else:
             st.session_state[key] = persisted_state.get(key, default)
@@ -243,6 +248,8 @@ def check_and_assume_baton():
         should_have_baton = first_eligible_holder
 
     changed = False
+    previous_holder = current_holder_status # Guarda quem tinha antes da verificação
+
     for c in CONSULTORES:
         if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
             print(f'Limpando bastão de {c} (não deveria ter)')
@@ -258,8 +265,8 @@ def check_and_assume_baton():
         log_status_change(should_have_baton, old_status, 'Bastão', duration)
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
-        if current_holder_status != should_have_baton: 
-            # <-- MODIFICADO: 'play_sound' removido daqui -->
+        if previous_holder != should_have_baton: 
+            st.session_state.just_received_baton = True # <-- MODIFICADO: Seta a flag para o som
             send_chat_notification_internal(should_have_baton, 'Bastão') 
         if st.session_state.skip_flags.get(should_have_baton):
             print(f' Consumindo skip flag de {should_have_baton} ao assumir.')
@@ -318,10 +325,8 @@ def update_queue(consultor):
     baton_changed = check_and_assume_baton()
     if not baton_changed:
         save_state()
-    # <-- MODIFICADO: st.rerun() removido -->
 
 def rotate_bastao(): 
-    """Ação 'Passar' que lida com a rotação e o reset do ciclo."""
     print('CALLBACK ROTATE BASTAO (PASSAR)')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -342,9 +347,7 @@ def rotate_bastao():
         if check_and_assume_baton(): pass 
         return
 
-    # --- LÓGICA DE RESET ---
     reset_triggered = False
-    
     first_eligible_index_overall = find_next_holder_index(-1, queue, skips) 
     potential_next_index = find_next_holder_index(current_index, queue, skips)
 
@@ -354,18 +357,14 @@ def rotate_bastao():
 
         if potential_next_holder == first_eligible_holder_overall and current_holder != first_eligible_holder_overall:
             print("--- RESETANDO CICLO (Detectado ao passar para o primeiro elegível) ---")
-            
             st.session_state.skip_flags = {c: False for c in CONSULTORES if st.session_state.get(f'check_{c}')}
             skips = st.session_state.skip_flags 
             reset_triggered = True
-            
             next_index = first_eligible_index_overall 
         else:
             next_index = potential_next_index
     else:
         next_index = -1
-    # --- FIM LÓGICA DE RESET ---
-
 
     if next_index != -1:
         next_holder = queue[next_index]
@@ -381,7 +380,7 @@ def rotate_bastao():
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False 
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
-        # <-- MODIFICADO: 'play_sound' removido daqui -->
+        st.session_state.just_received_baton = True # <-- MODIFICADO: Seta a flag para o som
         st.session_state.rotation_gif_start_time = datetime.now()
         
         save_state()
@@ -389,8 +388,6 @@ def rotate_bastao():
         print('Ninguém elegível. Forçando re-check e mantendo estado atual.')
         st.warning('Não há próximo consultor elegível na fila no momento.')
         check_and_assume_baton() 
-        
-    # <-- MODIFICADO: st.rerun() removido -->
 
 def toggle_skip(): 
     print('CALLBACK TOGGLE SKIP')
@@ -414,7 +411,6 @@ def toggle_skip():
         return 
 
     save_state() 
-    # <-- MODIFICADO: st.rerun() removido -->
 
 def update_status(status_text, change_to_available): 
     print(f'CALLBACK UPDATE STATUS: {status_text}')
@@ -439,7 +435,6 @@ def update_status(status_text, change_to_available):
     if status_text == 'Almoço' and not is_second_try:
         all_statuses = st.session_state.status_texto
         
-        # LÓGICA CORRIGIDA: Calcular o "Pool Ativo"
         num_na_fila = sum(1 for s in all_statuses.values() if s == '' or s == 'Bastão')
         num_atividade = sum(1 for s in all_statuses.values() if s == 'Atividade')
         total_ativos = num_na_fila + num_atividade
@@ -456,7 +451,8 @@ def update_status(status_text, change_to_available):
             st.session_state.lunch_warning_info = {
                 'consultor': selected,
                 'start_time': datetime.now(),
-                'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos ({num_almoco}/{total_ativos}) já em almoço. Clique novamente em "Almoço" para confirmar.'
+                # <-- MODIFICADO: Mensagem simplificada -->
+                'message': f'Consultor {selected} verificar horário. Metade dos consultores ativos já em almoço. Clique novamente em "Almoço" para confirmar.'
             }
             save_state() 
             return 
@@ -486,7 +482,6 @@ def update_status(status_text, change_to_available):
     
     if not baton_changed: 
         save_state() 
-    # <-- MODIFICADO: st.rerun() removido -->
 
 def manual_rerun():
     print('CALLBACK MANUAL RERUN')
@@ -499,8 +494,7 @@ def manual_rerun():
 # ============================================
 
 st.set_page_config(page_title="Controle Bastão Cesupe", layout="wide")
-# <-- MODIFICADO: Linha que esconde alertas removida -->
-# st.markdown('<style>div.stAlert { display: none !important; }</style>', unsafe_allow_html=True) 
+# Linha que esconde alertas removida 
 init_session_state()
 
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
@@ -542,24 +536,20 @@ if lunch_warning_info and lunch_warning_info.get('start_time'):
             
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 
-# <-- MODIFICADO: Lógica de som movida para a renderização -->
-# Determina o responsável *atual*
-responsavel_atual = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
-# Pega o responsável *anterior* (antes do refresh)
-previous_responsavel = st.session_state.get('previous_responsavel', None)
-# Pega quem está vendo a página
+# <-- MODIFICADO: Lógica de som baseada na flag 'just_received_baton' -->
+responsavel = next((c for c, s in st.session_state.status_texto.items() if s == 'Bastão'), None)
 selected_consultor = st.session_state.get('consultor_selectbox', 'Selecione um nome')
 
-# Se o responsável mudou E o novo responsável sou EU, toque o som.
-if responsavel_atual != previous_responsavel and \
-   responsavel_atual == selected_consultor and \
+if st.session_state.get('just_received_baton', False) and \
+   responsavel == selected_consultor and \
    selected_consultor != 'Selecione um nome':
     st.session_state.play_sound = True
+    st.session_state.just_received_baton = False # Reseta a flag imediatamente
     print(f"SOUND TRIGGER: {selected_consultor} just received the baton.")
 
 if st.session_state.get('play_sound', False):
     st.components.v1.html(play_sound_html(), height=0, width=0)
-    st.session_state.play_sound = False # Reseta o som
+    st.session_state.play_sound = False # Reseta o som após tocar
 
 if show_gif: st.image(GIF_URL_ROTATION, width=200, caption='Bastão Passado!')
 
@@ -574,8 +564,6 @@ if st.session_state.get('gif_warning', False):
 col_principal, col_disponibilidade = st.columns([1.5, 1])
 queue = st.session_state.bastao_queue
 skips = st.session_state.skip_flags
-# 'responsavel' é a mesma variável que 'responsavel_atual'
-responsavel = responsavel_atual 
 current_index = queue.index(responsavel) if responsavel in queue else -1
 proximo_index = find_next_holder_index(current_index, queue, skips)
 proximo = queue[proximo_index] if proximo_index != -1 else None
@@ -728,6 +716,4 @@ with col_disponibilidade:
     if datetime.now().hour >= 20 and datetime.now().date() > (st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()):
         send_daily_report()
 
-# <-- MODIFICADO: Atualiza o 'previous_responsavel' no final de cada renderização -->
-st.session_state.previous_responsavel = responsavel
 print('--- FIM DO RENDER ---')
