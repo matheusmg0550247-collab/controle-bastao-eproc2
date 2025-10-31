@@ -72,7 +72,9 @@ STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'S
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
 GIF_URL_LUNCH_WARNING = 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGZlbHN1azB3b2drdTI1eG10cDEzeWpmcmtwenZxNTV0bnc2OWgzZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bNlqpmBJRDMpxulfFB/giphy.gif'
-SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/refs/heads/main/doorbell-223669.mp3"
+SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/main/doorbell-223669.mp3"
+# <-- NOVO: URL da Imagem Novembro Azul -->
+NOVEMBRO_AZUL_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/main/novembro-azul.png"
 
 # ============================================
 # 2. FUNÇÕES AUXILIARES GLOBAIS
@@ -827,7 +829,18 @@ init_session_state()
 
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
 
-st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')
+# <-- MODIFICADO: Título com Imagem -->
+st.markdown(
+    f"""
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <h1 style="margin-bottom: 0;">Controle Bastão Cesupe {BASTAO_EMOJI}</h1>
+        <img src="{NOVEMBRO_AZUL_URL}" alt="Novembro Azul" style="width: 50px; height: auto;">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+# <-- FIM DA MODIFICAÇÃO -->
+
 st.markdown("<hr style='border: 1px solid #4A90E2;'>", unsafe_allow_html=True) 
 
 gif_start_time = st.session_state.get('rotation_gif_start_time')
@@ -1062,7 +1075,6 @@ with col_principal:
     guide_step = st.session_state.get('chamado_guide_step', 0)
 
     if guide_step == 0:
-        # <-- MODIFICADO: Texto do botão -->
         st.button("Gerar prévia", on_click=set_chamado_step, args=(1,), use_container_width=True)
     else:
         with st.container(border=True):
