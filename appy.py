@@ -4,7 +4,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from operator import itemgetter
 from streamlit_autorefresh import st_autorefresh
 import json # Usado para serialização de logs
@@ -44,21 +44,22 @@ def get_global_state_cache():
         'priority_return_queue': [],
         'rotation_gif_start_time': None,
         'lunch_warning_info': None, # Aviso de almoço Global
-        'daily_logs': [] # <<< NOVO: Log persistente para o relatório
+        'daily_logs': [] # Log persistente para o relatório
     }
 
 # --- Constantes ---
-# Webhook para o qual o relatório diário será enviado
 GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
-CHAT_WEBHOOK_BASTAO = "" # Webhook para notificações de giro (mantido)
+CHAT_WEBHOOK_BASTAO = "" 
 
-# <-- Webhook e Constantes para Registro de Atividade -->
+# -- Constantes de Registro de Atividade --
 GOOGLE_CHAT_WEBHOOK_REGISTRO = "https://chat.googleapis.com/v1/spaces/AAQAVvsU4Lg/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=hSghjEZq8-1EmlfHdSoPRq_nTSpYc0usCs23RJOD-yk"
+# Formulário "Atividade"
 REG_USUARIO_OPCOES = ["Cartório", "Externo", "Gabinete", "Interno"]
 REG_SISTEMA_OPCOES = ["Conveniados/Outros", "Eproc", "Themis", "JIPE", "SIAP"]
 REG_CANAL_OPCOES = ["Email", "Telefone", "Whatsapp"]
 REG_DESFECHO_OPCOES = ["Escalonado", "Resolvido - Cesupe"]
-# <-- FIM NOVO -->
+# <-- NOVO: Formulário "Presencial" -->
+REG_PRESENCIAL_ATIVIDADE_OPCOES = ["Sessão", "Homologação", "Treinamento", "Chamado/Jira", "Atendimento", "Outros"]
 
 BASTAO_EMOJI = "💙" 
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
@@ -77,6 +78,7 @@ def date_serializer(obj):
     """Serializador para objetos datetime (usado em logs)."""
     if isinstance(obj, datetime): return obj.isoformat()
     if isinstance(obj, timedelta): return obj.total_seconds()
+    if isinstance(obj, (date, time)): return obj.isoformat()
     return str(obj)
 
 def save_state():
@@ -148,9 +150,10 @@ def send_chat_notification_internal(consultor, status):
 
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
 
-# <-- MODIFICADO: Função de registro AGORA só envia dados e retorna True/False -->
-def send_registro_to_chat(consultor, tipo_atendimento, form_data):
-    """Envia o registro de atividade para o webhook do Google Chat."""
+# --- Funções de Envio de Registro ---
+
+def send_atividade_to_chat(consultor, tipo_atendimento, form_data):
+    """Envia o registro de 'Atividade' para o webhook do Google Chat."""
     if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
         print("Webhook de registro não configurado.")
         return False
@@ -175,12 +178,50 @@ def send_registro_to_chat(consultor, tipo_atendimento, form_data):
     try:
         response = requests.post(GOOGLE_CHAT_WEBHOOK_REGISTRO, json=chat_message)
         response.raise_for_status()
-        print("Registro de atividade enviado com sucesso.")
+        print("Registro de 'Atividade' enviado com sucesso.")
         return True
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao enviar registro de atividade: {e}")
+        print(f"Erro ao enviar registro de 'Atividade': {e}")
         return False
-# <-- FIM MODIFICADO -->
+
+# <-- NOVO: Função de envio para 'Presencial' -->
+def send_presencial_to_chat(consultor, form_data):
+    """Envia o registro de 'Presencial' para o webhook do Google Chat."""
+    if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
+        print("Webhook de registro não configurado.")
+        return False
+
+    if not consultor or consultor == 'Selecione um nome':
+        print("Erro de registro: Consultor não selecionado.")
+        return False
+
+    # Formata a data e horas
+    data_str = form_data['data'].strftime("%d/%m/%Y")
+    inicio_str = form_data['inicio'].strftime("%H:%M")
+    fim_str = form_data['fim'].strftime("%H:%M")
+
+    message_text = (
+        f"**📅 Novo Registro Presencial**\n\n"
+        f"**Consultor:** {consultor}\n"
+        f"**Atividade:** {form_data['atividade']}\n"
+        f"**Data:** {data_str}\n"
+        f"**Início:** {inicio_str}\n"
+        f"**Fim:** {fim_str}\n"
+        f"**Descrição:** {form_data['descricao']}\n"
+        f"**Participantes Cesupe:** {form_data['particip_cesupe']}\n"
+        f"**Participantes Externos:** {form_data['particip_externos']}\n"
+    )
+    
+    chat_message = {'text': message_text}
+    try:
+        response = requests.post(GOOGLE_CHAT_WEBHOOK_REGISTRO, json=chat_message)
+        response.raise_for_status()
+        print("Registro de 'Presencial' enviado com sucesso.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao enviar registro de 'Presencial': {e}")
+        return False
+# <-- FIM NOVO -->
 
 
 def load_logs(): 
@@ -310,13 +351,13 @@ def init_session_state():
         'play_sound': False,
         'gif_warning': False,
         'lunch_warning_info': None,
-        'last_reg_status': None # <-- NOVO: Flag para status de registro
+        'last_reg_status': None # Flag para status de registro
     }
 
     for key, default in defaults.items():
-        if key in ['play_sound', 'gif_warning', 'last_reg_status']: # Manter flags locais
+        if key in ['play_sound', 'gif_warning', 'last_reg_status']: 
             st.session_state.setdefault(key, default)
-        else: # Carrega do global
+        else: 
             st.session_state[key] = persisted_state.get(key, default)
 
     st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
@@ -629,16 +670,12 @@ def manual_rerun():
     st.session_state.lunch_warning_info = None 
     st.rerun() 
 
-# <-- NOVO: Callback para lidar com o envio do formulário de registro -->
-def handle_form_submission():
-    """
-    Callback executado ao clicar em 'Enviar Registro'.
-    Lê os dados do formulário (que devem ter chaves), envia para o webhook
-    e limpa o formulário (incluindo o radio) em caso de sucesso.
-    """
-    print("CALLBACK: handle_form_submission")
+# --- Callbacks de Formulário de Registro ---
+
+def handle_atividade_submission():
+    """Callback: Envio do formulário 'Atividade'."""
+    print("CALLBACK: handle_atividade_submission")
     
-    # 1. Ler dados do estado (dos widgets com chaves)
     consultor_selecionado = st.session_state.consultor_selectbox
     tipo_atendimento = st.session_state.registro_tipo_selecao
     
@@ -651,15 +688,12 @@ def handle_form_submission():
         "desfecho": st.session_state.get('reg_desfecho') or "N/A"
     }
     
-    # 2. Enviar para o Chat
-    success = send_registro_to_chat(consultor_selecionado, tipo_atendimento, form_data)
+    success = send_atividade_to_chat(consultor_selecionado, tipo_atendimento, form_data)
     
-    # 3. Atualizar o estado com base no resultado
     if success:
         st.session_state.last_reg_status = "success"
-        
-        # Limpa o formulário e o radio button (agora é seguro, estamos em um callback)
-        st.session_state.registro_tipo_selecao = None
+        st.session_state.registro_tipo_selecao = None # Fecha o formulário
+        # Limpa os campos do formulário
         st.session_state.reg_usuario = None
         st.session_state.reg_nome_setor = ""
         st.session_state.reg_sistema = None
@@ -667,9 +701,46 @@ def handle_form_submission():
         st.session_state.reg_canal = None
         st.session_state.reg_desfecho = None
     else:
-        # Falha (ex: consultor não selecionado)
         st.session_state.last_reg_status = "error"
-        # Não limpa o formulário para o usuário poder corrigir
+
+# <-- NOVO: Callback para formulário 'Presencial' -->
+def handle_presencial_submission():
+    """Callback: Envio do formulário 'Presencial'."""
+    print("CALLBACK: handle_presencial_submission")
+    
+    consultor_selecionado = st.session_state.consultor_selectbox
+    
+    # Lógica de 'Outros'
+    atividade = st.session_state.get('reg_pres_atividade')
+    if atividade == "Outros":
+        atividade_final = st.session_state.get('reg_pres_atividade_outro') or "Outros (não especificado)"
+    else:
+        atividade_final = atividade or "N/A"
+
+    form_data = {
+        "atividade": atividade_final,
+        "descricao": st.session_state.get('reg_pres_descricao') or "N/A",
+        "particip_cesupe": st.session_state.get('reg_pres_particip_cesupe') or "N/A",
+        "particip_externos": st.session_state.get('reg_pres_particip_externos') or "N/A",
+        "data": st.session_state.get('reg_pres_data') or date.today(),
+        "inicio": st.session_state.get('reg_pres_inicio') or time(0, 0),
+        "fim": st.session_state.get('reg_pres_fim') or time(0, 0)
+    }
+    
+    success = send_presencial_to_chat(consultor_selecionado, form_data)
+    
+    if success:
+        st.session_state.last_reg_status = "success"
+        st.session_state.registro_tipo_selecao = None # Fecha o formulário
+        # Limpa os campos do formulário
+        st.session_state.reg_pres_atividade = None
+        st.session_state.reg_pres_atividade_outro = ""
+        st.session_state.reg_pres_descricao = ""
+        st.session_state.reg_pres_particip_cesupe = ""
+        st.session_state.reg_pres_particip_externos = ""
+        # Data e hora podem manter o padrão
+    else:
+        st.session_state.last_reg_status = "error"
 # <-- FIM NOVO -->
 
 
@@ -817,16 +888,15 @@ with col_principal:
     st.markdown("####")
     st.button('🔄 Atualizar (Manual)', on_click=manual_rerun, use_container_width=True)
     
-    # --- NOVO: Bloco de Registro de Atividade (MODIFICADO) ---
+    # --- Bloco de Registro de Atividade (MODIFICADO) ---
     st.markdown("---")
     
-    # <-- NOVO: Mostrar mensagens de sucesso/erro do callback -->
     if st.session_state.last_reg_status == "success":
-        st.success("Registro de atendimento enviado com sucesso!")
-        st.session_state.last_reg_status = None # Limpa a flag
+        st.success("Registro enviado com sucesso!")
+        st.session_state.last_reg_status = None 
     elif st.session_state.last_reg_status == "error":
         st.error("Erro ao enviar registro. Verifique se seu nome está selecionado no menu 'Consultor' acima.")
-        st.session_state.last_reg_status = None # Limpa a flag
+        st.session_state.last_reg_status = None 
     
     st.header("Registrar Atendimento")
 
@@ -834,19 +904,15 @@ with col_principal:
         "Tipo de Atendimento:",
         ["Atividade", "Presencial"],
         index=None,
-        key='registro_tipo_selecao', # Esta chave controla a visibilidade
+        key='registro_tipo_selecao', 
         horizontal=True
     )
 
-    # O formulário SÓ aparece se o radio estiver marcado
-    if st.session_state.registro_tipo_selecao:
-        tipo_atendimento = st.session_state.registro_tipo_selecao
-        
-        # O 'clear_on_submit' não é mais necessário, pois o callback limpa os campos
-        with st.form(key="registro_form"):
-            st.subheader(f"Registro de: **{tipo_atendimento}**")
+    # --- Formulário "Atividade" ---
+    if st.session_state.registro_tipo_selecao == "Atividade":
+        with st.form(key="form_atividade"):
+            st.subheader(f"Registro de: **Atividade**")
             
-            # Adicionadas CHAVES (keys) a todos os campos
             st.selectbox("Usuário:", REG_USUARIO_OPCOES, index=None, placeholder="Selecione o tipo de usuário", key='reg_usuario')
             st.text_input("Nome-usuário - Setor:", key='reg_nome_setor')
             st.selectbox("Sistema:", REG_SISTEMA_OPCOES, index=None, placeholder="Selecione o sistema", key='reg_sistema')
@@ -854,10 +920,47 @@ with col_principal:
             st.selectbox("Canal de atendimento:", REG_CANAL_OPCOES, index=None, placeholder="Selecione o canal", key='reg_canal')
             st.selectbox("Desfecho:", REG_DESFECHO_OPCOES, index=None, placeholder="Selecione o desfecho", key='reg_desfecho')
             
-            # O botão de envio agora chama o callback
             st.form_submit_button(
                 "Enviar Registro",
-                on_click=handle_form_submission # <-- AQUI ESTÁ A MÁGICA
+                on_click=handle_atividade_submission 
+            )
+            
+    # --- NOVO: Formulário "Presencial" ---
+    elif st.session_state.registro_tipo_selecao == "Presencial":
+        with st.form(key="form_presencial"):
+            st.subheader(f"Registro de: **Presencial**")
+
+            # Atividade com lógica de "Outros"
+            atividade_selecionada = st.selectbox(
+                "Atividade:", 
+                REG_PRESENCIAL_ATIVIDADE_OPCOES, 
+                index=None, 
+                placeholder="Selecione a atividade", 
+                key='reg_pres_atividade'
+            )
+            
+            if atividade_selecionada == "Outros":
+                st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
+
+            st.text_input("Descrição:", key='reg_pres_descricao')
+            st.text_input(
+                "Participantes Cesupe:", 
+                help="(Preencher se o registro for para mais de um consultor)", 
+                key='reg_pres_particip_cesupe'
+            )
+            st.text_input("Participantes Externos:", key='reg_pres_particip_externos')
+            
+            col_data, col_inicio, col_fim = st.columns(3)
+            with col_data:
+                st.date_input("Data:", key='reg_pres_data')
+            with col_inicio:
+                st.time_input("Início:", key='reg_pres_inicio')
+            with col_fim:
+                st.time_input("Fim:", key='reg_pres_fim')
+
+            st.form_submit_button(
+                "Enviar Registro",
+                on_click=handle_presencial_submission # <-- Chama o novo callback
             )
     # --- FIM NOVO ---
 
