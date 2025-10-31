@@ -52,7 +52,7 @@ def get_global_state_cache():
 GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "" # Webhook para notificações de giro (mantido)
 
-# <-- NOVO: Webhook e Constantes para Registro de Atividade -->
+# <-- Webhook e Constantes para Registro de Atividade -->
 GOOGLE_CHAT_WEBHOOK_REGISTRO = "https://chat.googleapis.com/v1/spaces/AAQAVvsU4Lg/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=hSghjEZq8-1EmlfHdSoPRq_nTSpYc0usCs23RJOD-yk"
 REG_USUARIO_OPCOES = ["Cartório", "Externo", "Gabinete", "Interno"]
 REG_SISTEMA_OPCOES = ["Conveniados/Outros", "Eproc", "Themis", "JIPE", "SIAP"]
@@ -60,7 +60,7 @@ REG_CANAL_OPCOES = ["Email", "Telefone", "Whatsapp"]
 REG_DESFECHO_OPCOES = ["Escalonado", "Resolvido - Cesupe"]
 # <-- FIM NOVO -->
 
-BASTAO_EMOJI = "💙" # <-- ALTERADO PARA NOVEMBRO AZUL
+BASTAO_EMOJI = "💙" 
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
@@ -94,8 +94,6 @@ def save_state():
         global_data['rotation_gif_start_time'] = st.session_state.get('rotation_gif_start_time')
         global_data['lunch_warning_info'] = st.session_state.get('lunch_warning_info') 
         
-        # Serializa os logs para salvar no cache global
-        # É mais seguro serializar para evitar problemas de concorrência com objetos complexos
         global_data['daily_logs'] = json.loads(json.dumps(st.session_state.daily_logs, default=date_serializer))
         
         print(f'*** Estado GLOBAL Salvo (Cache de Recurso) ***')
@@ -106,17 +104,15 @@ def load_state():
     """Carrega o estado do cache GLOBAL."""
     global_data = get_global_state_cache()
     
-    # Desserializa os logs
     loaded_logs = global_data.get('daily_logs', [])
-    if loaded_logs and isinstance(loaded_logs[0], dict): # Já está no formato de dicionário
+    if loaded_logs and isinstance(loaded_logs[0], dict):
          deserialized_logs = loaded_logs
     else:
-        try: # Tenta desserializar se for JSON string
+        try: 
              deserialized_logs = json.loads(loaded_logs)
-        except: # Falha, apenas usa a lista (pode ser lista de strings)
+        except: 
              deserialized_logs = loaded_logs 
     
-    # Converte durações de volta para timedelta
     final_logs = []
     for log in deserialized_logs:
         if isinstance(log, dict):
@@ -152,16 +148,15 @@ def send_chat_notification_internal(consultor, status):
 
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
 
-# <-- NOVO: Função para enviar registro de atividade -->
+# <-- MODIFICADO: Função de registro AGORA só envia dados e retorna True/False -->
 def send_registro_to_chat(consultor, tipo_atendimento, form_data):
     """Envia o registro de atividade para o webhook do Google Chat."""
     if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
         print("Webhook de registro não configurado.")
-        st.error("Webhook de registro não está configurado.")
         return False
 
     if not consultor or consultor == 'Selecione um nome':
-        st.error("Selecione seu nome no menu 'Consultor' antes de enviar o registro.")
+        print("Erro de registro: Consultor não selecionado.")
         return False
 
     message_text = (
@@ -181,45 +176,36 @@ def send_registro_to_chat(consultor, tipo_atendimento, form_data):
         response = requests.post(GOOGLE_CHAT_WEBHOOK_REGISTRO, json=chat_message)
         response.raise_for_status()
         print("Registro de atividade enviado com sucesso.")
-        st.success(f"Registro de {tipo_atendimento} enviado com sucesso!")
         return True
     except requests.exceptions.RequestException as e:
         print(f"Erro ao enviar registro de atividade: {e}")
-        st.error(f"Erro ao enviar registro: {e}")
         return False
-# <-- FIM NOVO -->
+# <-- FIM MODIFICADO -->
 
 
-# <-- MODIFICADO: Lê logs do session_state -->
 def load_logs(): 
     """Carrega logs do st.session_state local."""
     return st.session_state.get('daily_logs', []).copy()
 
-# <-- MODIFICADO: Salva logs no session_state -->
 def save_logs(l): 
     """Salva logs no st.session_state local."""
     st.session_state.daily_logs = l
-    # O save_state() será chamado pela função principal de callback
 
-# <-- MODIFICADO: Loga o evento no st.session_state.daily_logs -->
 def log_status_change(consultor, old_status, new_status, duration):
     """Registra uma mudança de status na lista de logs da sessão."""
     print(f'LOG: {consultor} de "{old_status or "-"}" para "{new_status or "-"}" após {duration}')
     if not isinstance(duration, timedelta): duration = timedelta(0)
 
-    # Cria a entrada de log
     entry = {
         'timestamp': datetime.now(),
         'consultor': consultor,
         'old_status': old_status, 
         'new_status': new_status,
-        'duration': duration, # Objeto timedelta
-        'duration_s': duration.total_seconds() # Segundos (para serialização)
+        'duration': duration,
+        'duration_s': duration.total_seconds()
     }
-    # Adiciona à lista de logs da sessão
     st.session_state.daily_logs.append(entry)
     
-    # Atualiza o tempo de início do novo status
     if consultor not in st.session_state.current_status_starts:
         st.session_state.current_status_starts[consultor] = datetime.now()
     st.session_state.current_status_starts[consultor] = datetime.now()
@@ -231,7 +217,6 @@ def format_time_duration(duration):
     s = int(duration.total_seconds()); h, s = divmod(s, 3600); m, s = divmod(s, 60)
     return f'{h:02}:{m:02}:{s:02}'
 
-# <-- MODIFICADO: Função de relatório diário implementada -->
 def send_daily_report(): 
     """Agrega os logs e contagens e envia o relatório diário."""
     print("Iniciando envio do relatório diário...")
@@ -239,27 +224,24 @@ def send_daily_report():
     logs = load_logs() 
     bastao_counts = st.session_state.bastao_counts.copy()
     
-    # 1. Agregar dados dos logs
     aggregated_data = {nome: {} for nome in CONSULTORES}
     
     for log in logs:
         try:
             consultor = log['consultor']
-            status = log['old_status'] # Nos importa o status que terminou
+            status = log['old_status']
             duration = log.get('duration', timedelta(0))
             
-            # Garante que a duração é um timedelta
             if not isinstance(duration, timedelta):
                 try: duration = timedelta(seconds=float(duration))
                 except: duration = timedelta(0)
 
-            if status and consultor in aggregated_data: # Ignora status vazios
+            if status and consultor in aggregated_data:
                 current_duration = aggregated_data[consultor].get(status, timedelta(0))
                 aggregated_data[consultor][status] = current_duration + duration
         except Exception as e:
             print(f"Erro ao processar log: {e} - Log: {log}")
 
-    # 2. Formatar o texto do relatório
     today_str = datetime.now().strftime("%d/%m/%Y")
     report_text = f"📊 **Relatório Diário de Atividades - {today_str}** 📊\n\n"
     
@@ -270,58 +252,52 @@ def send_daily_report():
         times = aggregated_data.get(nome, {})
         bastao_time = times.get('Bastão', timedelta(0))
         
-        # Só adiciona ao relatório se houver dados
         if counts > 0 or times:
             consultores_com_dados.append(nome)
             report_text += f"**👤 {nome}**\n"
-            report_text += f"- 💙 Bastão Recebido: **{counts}** vez(es)\n" # <-- Alterado Emoji
+            report_text += f"- 💙 Bastão Recebido: **{counts}** vez(es)\n"
             report_text += f"- ⏱️ Tempo com Bastão: **{format_time_duration(bastao_time)}**\n"
             
             other_statuses = []
-            # Ordena os status (exceto Bastão) para consistência
             sorted_times = sorted(times.items(), key=itemgetter(0)) 
             
             for status, time in sorted_times:
-                if status != 'Bastão' and status: # Ignora 'Bastão' (já reportado) e vazios
+                if status != 'Bastão' and status:
                     other_statuses.append(f"{status}: **{format_time_duration(time)}**")
             
             if other_statuses:
                 report_text += f"- ⏳ Outros Tempos: {', '.join(other_statuses)}\n\n"
             else:
-                report_text += "\n" # Apenas adiciona espaço
+                report_text += "\n"
 
-    # 3. Enviar o relatório
     if not consultores_com_dados:
         print("Relatório diário não enviado: Sem dados de atividade hoje.")
         report_text = f"📊 **Relatório Diário - {today_str}** 📊\n\nNenhuma atividade registrada hoje."
-        # Mesmo assim, envia um aviso de "nada" e reseta.
 
     if not GOOGLE_CHAT_WEBHOOK_BACKUP:
         print("Webhook de backup não configurado. Relatório não enviado.")
-        return # Não reseta o estado se o webhook não estiver lá
+        return 
 
     chat_message = {'text': report_text}
     print(f"Enviando relatório diário para o webhook...")
     
     try:
         response = requests.post(GOOGLE_CHAT_WEBHOOK_BACKUP, json=chat_message)
-        response.raise_for_status() # Lança erro se o status for 4xx ou 5xx
+        response.raise_for_status() 
         
         print("Relatório diário enviado com sucesso.")
         
-        # 4. Resetar o estado para o próximo dia (APÓS SUCESSO)
         st.session_state['report_last_run_date'] = datetime.now()
-        st.session_state['daily_logs'] = [] # Limpa os logs
-        st.session_state['bastao_counts'] = {nome: 0 for nome in CONSULTORES} # Reseta contagens
+        st.session_state['daily_logs'] = []
+        st.session_state['bastao_counts'] = {nome: 0 for nome in CONSULTORES}
         
         print("Logs diários e contagens de bastão foram resetados.")
-        save_state() # Salva o estado resetado no GLOBAL
+        save_state() 
 
     except requests.exceptions.RequestException as e:
         print(f'Erro ao enviar relatório diário: {e}')
         if e.response is not None:
             print(f'Status: {e.response.status_code}, Resposta: {e.response.text}')
-        # NÃO reseta o estado se falhar, para tentar novamente na próxima vez.
 
 def init_session_state():
     """Inicializa/sincroniza o st.session_state com o estado GLOBAL do cache."""
@@ -331,28 +307,26 @@ def init_session_state():
         'bastao_start_time': None, 
         'report_last_run_date': datetime.min, 
         'rotation_gif_start_time': None,
-        'play_sound': False, # Flag local
-        'gif_warning': False, # Flag local
-        'lunch_warning_info': None # Carrega global
+        'play_sound': False,
+        'gif_warning': False,
+        'lunch_warning_info': None,
+        'last_reg_status': None # <-- NOVO: Flag para status de registro
     }
 
-    # Sincroniza as variáveis simples
     for key, default in defaults.items():
-        if key in ['play_sound', 'gif_warning']: # Mantém flags locais
+        if key in ['play_sound', 'gif_warning', 'last_reg_status']: # Manter flags locais
             st.session_state.setdefault(key, default)
         else: # Carrega do global
             st.session_state[key] = persisted_state.get(key, default)
 
-    # Sincroniza as coleções de estado
     st.session_state['bastao_queue'] = persisted_state.get('bastao_queue', []).copy()
     st.session_state['priority_return_queue'] = persisted_state.get('priority_return_queue', []).copy()
     st.session_state['bastao_counts'] = persisted_state.get('bastao_counts', {}).copy()
     st.session_state['skip_flags'] = persisted_state.get('skip_flags', {}).copy()
     st.session_state['status_texto'] = persisted_state.get('status_texto', {}).copy()
     st.session_state['current_status_starts'] = persisted_state.get('current_status_starts', {}).copy()
-    st.session_state['daily_logs'] = persisted_state.get('daily_logs', []).copy() # <-- Sincroniza logs
+    st.session_state['daily_logs'] = persisted_state.get('daily_logs', []).copy() 
 
-    # Garante consultores e sincroniza checkboxes
     for nome in CONSULTORES:
         st.session_state.bastao_counts.setdefault(nome, 0)
         st.session_state.skip_flags.setdefault(nome, False)
@@ -419,7 +393,7 @@ def check_and_assume_baton():
         if c != should_have_baton and st.session_state.status_texto.get(c) == 'Bastão':
             print(f'Limpando bastão de {c} (não deveria ter)')
             duration = datetime.now() - st.session_state.current_status_starts.get(c, datetime.now())
-            log_status_change(c, 'Bastão', 'Indisponível', duration) # <-- Log
+            log_status_change(c, 'Bastão', 'Indisponível', duration)
             st.session_state.status_texto[c] = 'Indisponível'
             changed = True
 
@@ -427,7 +401,7 @@ def check_and_assume_baton():
         print(f'Atribuindo bastão para {should_have_baton}')
         old_status = st.session_state.status_texto.get(should_have_baton, '')
         duration = datetime.now() - st.session_state.current_status_starts.get(should_have_baton, datetime.now())
-        log_status_change(should_have_baton, old_status, 'Bastão', duration) # <-- Log
+        log_status_change(should_have_baton, old_status, 'Bastão', duration)
         st.session_state.status_texto[should_have_baton] = 'Bastão'
         st.session_state.bastao_start_time = datetime.now()
         if previous_holder != should_have_baton: 
@@ -442,7 +416,7 @@ def check_and_assume_baton():
         if current_holder_status:
             print(f'Ninguém elegível, limpando bastão de {current_holder_status}')
             duration = datetime.now() - st.session_state.current_status_starts.get(current_holder_status, datetime.now())
-            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration) # <-- Log
+            log_status_change(current_holder_status, 'Bastão', 'Indisponível', duration)
             st.session_state.status_texto[current_holder_status] = 'Indisponível' 
             changed = True
         if st.session_state.bastao_start_time is not None: changed = True
@@ -469,7 +443,7 @@ def update_queue(consultor):
     duration = datetime.now() - st.session_state.current_status_starts.get(consultor, datetime.now())
 
     if is_checked: 
-        log_status_change(consultor, old_status_text or 'Indisponível', '', duration) # <-- Log
+        log_status_change(consultor, old_status_text or 'Indisponível', '', duration)
         st.session_state.status_texto[consultor] = '' 
         if consultor not in st.session_state.bastao_queue:
             st.session_state.bastao_queue.append(consultor) 
@@ -481,7 +455,7 @@ def update_queue(consultor):
     else: 
         if old_status_text not in STATUSES_DE_SAIDA and old_status_text != 'Bastão':
             log_old_status = old_status_text or ('Bastão' if was_holder_before else 'Disponível')
-            log_status_change(consultor, log_old_status , 'Indisponível', duration) # <-- Log
+            log_status_change(consultor, log_old_status , 'Indisponível', duration)
             st.session_state.status_texto[consultor] = 'Indisponível' 
         
         if consultor in st.session_state.bastao_queue:
@@ -539,16 +513,15 @@ def rotate_bastao():
         print(f'Passando bastão de {current_holder} para {next_holder} (Reset Triggered: {reset_triggered})')
         duration = datetime.now() - (st.session_state.bastao_start_time or datetime.now())
         
-        log_status_change(current_holder, 'Bastão', '', duration) # <-- Log
+        log_status_change(current_holder, 'Bastão', '', duration)
         st.session_state.status_texto[current_holder] = '' 
         
-        log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0)) # <-- Log
+        log_status_change(next_holder, st.session_state.status_texto.get(next_holder, ''), 'Bastão', timedelta(0))
         st.session_state.status_texto[next_holder] = 'Bastão'
         
         st.session_state.bastao_start_time = datetime.now()
         st.session_state.skip_flags[next_holder] = False 
         
-        # <-- MODIFICADO: Contagem de bastão -->
         st.session_state.bastao_counts[current_holder] = st.session_state.bastao_counts.get(current_holder, 0) + 1
         
         st.session_state.play_sound = True 
@@ -631,7 +604,7 @@ def update_status(status_text, change_to_available):
     old_status = st.session_state.status_texto.get(selected, '') or ('Bastão' if was_holder else 'Disponível')
     duration = datetime.now() - st.session_state.current_status_starts.get(selected, datetime.now())
     
-    log_status_change(selected, old_status, status_text, duration) # <-- Log
+    log_status_change(selected, old_status, status_text, duration)
     st.session_state.status_texto[selected] = status_text 
 
     if selected in st.session_state.bastao_queue: st.session_state.bastao_queue.remove(selected)
@@ -656,6 +629,50 @@ def manual_rerun():
     st.session_state.lunch_warning_info = None 
     st.rerun() 
 
+# <-- NOVO: Callback para lidar com o envio do formulário de registro -->
+def handle_form_submission():
+    """
+    Callback executado ao clicar em 'Enviar Registro'.
+    Lê os dados do formulário (que devem ter chaves), envia para o webhook
+    e limpa o formulário (incluindo o radio) em caso de sucesso.
+    """
+    print("CALLBACK: handle_form_submission")
+    
+    # 1. Ler dados do estado (dos widgets com chaves)
+    consultor_selecionado = st.session_state.consultor_selectbox
+    tipo_atendimento = st.session_state.registro_tipo_selecao
+    
+    form_data = {
+        "usuario": st.session_state.get('reg_usuario') or "N/A",
+        "nome_setor": st.session_state.get('reg_nome_setor') or "N/A",
+        "sistema": st.session_state.get('reg_sistema') or "N/A",
+        "descricao": st.session_state.get('reg_descricao') or "N/A",
+        "canal": st.session_state.get('reg_canal') or "N/A",
+        "desfecho": st.session_state.get('reg_desfecho') or "N/A"
+    }
+    
+    # 2. Enviar para o Chat
+    success = send_registro_to_chat(consultor_selecionado, tipo_atendimento, form_data)
+    
+    # 3. Atualizar o estado com base no resultado
+    if success:
+        st.session_state.last_reg_status = "success"
+        
+        # Limpa o formulário e o radio button (agora é seguro, estamos em um callback)
+        st.session_state.registro_tipo_selecao = None
+        st.session_state.reg_usuario = None
+        st.session_state.reg_nome_setor = ""
+        st.session_state.reg_sistema = None
+        st.session_state.reg_descricao = ""
+        st.session_state.reg_canal = None
+        st.session_state.reg_desfecho = None
+    else:
+        # Falha (ex: consultor não selecionado)
+        st.session_state.last_reg_status = "error"
+        # Não limpa o formulário para o usuário poder corrigir
+# <-- FIM NOVO -->
+
+
 # ============================================
 # 4. EXECUÇÃO PRINCIPAL DO STREAMLIT APP
 # ============================================
@@ -666,7 +683,7 @@ init_session_state()
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
 
 st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')
-st.markdown("<hr style='border: 1px solid #4A90E2;'>", unsafe_allow_html=True) # <-- ALTERADO PARA NOVEMBRO AZUL
+st.markdown("<hr style='border: 1px solid #4A90E2;'>", unsafe_allow_html=True) 
 
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 lunch_warning_info = st.session_state.get('lunch_warning_info') 
@@ -800,54 +817,48 @@ with col_principal:
     st.markdown("####")
     st.button('🔄 Atualizar (Manual)', on_click=manual_rerun, use_container_width=True)
     
-    # --- NOVO: Bloco de Registro de Atividade ---
+    # --- NOVO: Bloco de Registro de Atividade (MODIFICADO) ---
     st.markdown("---")
+    
+    # <-- NOVO: Mostrar mensagens de sucesso/erro do callback -->
+    if st.session_state.last_reg_status == "success":
+        st.success("Registro de atendimento enviado com sucesso!")
+        st.session_state.last_reg_status = None # Limpa a flag
+    elif st.session_state.last_reg_status == "error":
+        st.error("Erro ao enviar registro. Verifique se seu nome está selecionado no menu 'Consultor' acima.")
+        st.session_state.last_reg_status = None # Limpa a flag
+    
     st.header("Registrar Atendimento")
 
-    # Usar 'index=None' permite que o radio comece desmarcado
-    tipo_atendimento = st.radio(
+    st.radio(
         "Tipo de Atendimento:",
         ["Atividade", "Presencial"],
         index=None,
-        key='registro_tipo_selecao',
+        key='registro_tipo_selecao', # Esta chave controla a visibilidade
         horizontal=True
     )
 
-    if tipo_atendimento:
-        with st.form(key="registro_form", clear_on_submit=True):
+    # O formulário SÓ aparece se o radio estiver marcado
+    if st.session_state.registro_tipo_selecao:
+        tipo_atendimento = st.session_state.registro_tipo_selecao
+        
+        # O 'clear_on_submit' não é mais necessário, pois o callback limpa os campos
+        with st.form(key="registro_form"):
             st.subheader(f"Registro de: **{tipo_atendimento}**")
             
-            # Coletar dados do formulário
-            reg_usuario = st.selectbox("Usuário:", REG_USUARIO_OPCOES, index=None, placeholder="Selecione o tipo de usuário")
-            reg_nome_setor = st.text_input("Nome-usuário - Setor:")
-            reg_sistema = st.selectbox("Sistema:", REG_SISTEMA_OPCOES, index=None, placeholder="Selecione o sistema")
-            reg_descricao = st.text_input("Descrição do atendimento (até 7 palavras):")
-            reg_canal = st.selectbox("Canal de atendimento:", REG_CANAL_OPCOES, index=None, placeholder="Selecione o canal")
-            reg_desfecho = st.selectbox("Desfecho:", REG_DESFECHO_OPCOES, index=None, placeholder="Selecione o desfecho")
+            # Adicionadas CHAVES (keys) a todos os campos
+            st.selectbox("Usuário:", REG_USUARIO_OPCOES, index=None, placeholder="Selecione o tipo de usuário", key='reg_usuario')
+            st.text_input("Nome-usuário - Setor:", key='reg_nome_setor')
+            st.selectbox("Sistema:", REG_SISTEMA_OPCOES, index=None, placeholder="Selecione o sistema", key='reg_sistema')
+            st.text_input("Descrição do atendimento (até 7 palavras):", key='reg_descricao')
+            st.selectbox("Canal de atendimento:", REG_CANAL_OPCOES, index=None, placeholder="Selecione o canal", key='reg_canal')
+            st.selectbox("Desfecho:", REG_DESFECHO_OPCOES, index=None, placeholder="Selecione o desfecho", key='reg_desfecho')
             
-            # Botão de envio do formulário
-            submitted = st.form_submit_button("Enviar Registro")
-
-        if submitted:
-            consultor_selecionado = st.session_state.consultor_selectbox
-            
-            # Agrupar dados do formulário
-            form_data = {
-                "usuario": reg_usuario or "N/A",
-                "nome_setor": reg_nome_setor or "N/A",
-                "sistema": reg_sistema or "N/A",
-                "descricao": reg_descricao or "N/A",
-                "canal": reg_canal or "N/A",
-                "desfecho": reg_desfecho or "N/A"
-            }
-            
-            # Enviar para o webhook
-            success = send_registro_to_chat(consultor_selecionado, tipo_atendimento, form_data)
-            
-            if success:
-                # Limpa a seleção do radio button para esconder o formulário
-                st.session_state.registro_tipo_selecao = None
-                st.rerun() # Força o rerun para esconder o formulário imediatamente
+            # O botão de envio agora chama o callback
+            st.form_submit_button(
+                "Enviar Registro",
+                on_click=handle_form_submission # <-- AQUI ESTÁ A MÁGICA
+            )
     # --- FIM NOVO ---
 
 
@@ -890,7 +901,6 @@ with col_disponibilidade:
             
             skip_flag = skips.get(nome, False)
             if nome == responsavel:
-                # <-- ALTERADO PARA NOVEMBRO AZUL
                 display = f'<span style="background-color: #007BFF; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;">🔥 {nome}</span>'
             elif skip_flag:
                 display = f'**{nome}** :orange-background[Pulando ⏭️]'
@@ -921,7 +931,6 @@ with col_disponibilidade:
 
 # --- Lógica de Relatório Diário ---
 now = datetime.now()
-# Pega a data da última execução (converte para data se for datetime, ou usa data mínima)
 last_run_date = st.session_state.report_last_run_date.date() if isinstance(st.session_state.report_last_run_date, datetime) else datetime.min.date()
 
 # Rodar o relatório uma vez por dia, a partir das 20h
