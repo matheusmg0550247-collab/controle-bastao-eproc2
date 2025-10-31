@@ -51,7 +51,7 @@ def get_global_state_cache():
 # Webhook para o qual o relatório diário será enviado
 GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "" # Webhook para notificações de giro (mantido)
-BASTAO_EMOJI = "🌸"
+BASTAO_EMOJI = "💙" # <-- ALTERADO PARA NOVEMBRO AZUL
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
 STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
@@ -103,9 +103,9 @@ def load_state():
          deserialized_logs = loaded_logs
     else:
         try: # Tenta desserializar se for JSON string
-            deserialized_logs = json.loads(loaded_logs)
+             deserialized_logs = json.loads(loaded_logs)
         except: # Falha, apenas usa a lista (pode ser lista de strings)
-            deserialized_logs = loaded_logs 
+             deserialized_logs = loaded_logs 
     
     # Converte durações de volta para timedelta
     final_logs = []
@@ -227,7 +227,7 @@ def send_daily_report():
         if counts > 0 or times:
             consultores_com_dados.append(nome)
             report_text += f"**👤 {nome}**\n"
-            report_text += f"- 🌸 Bastão Recebido: **{counts}** vez(es)\n"
+            report_text += f"- 💙 Bastão Recebido: **{counts}** vez(es)\n" # <-- Alterado Emoji
             report_text += f"- ⏱️ Tempo com Bastão: **{format_time_duration(bastao_time)}**\n"
             
             other_statuses = []
@@ -619,7 +619,7 @@ init_session_state()
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
 
 st.title(f'Controle Bastão Cesupe {BASTAO_EMOJI}')
-st.markdown("<hr style='border: 1px solid #E75480;'>", unsafe_allow_html=True)
+st.markdown("<hr style='border: 1px solid #4A90E2;'>", unsafe_allow_html=True) # <-- ALTERADO PARA NOVEMBRO AZUL
 
 gif_start_time = st.session_state.get('rotation_gif_start_time')
 lunch_warning_info = st.session_state.get('lunch_warning_info') 
@@ -652,7 +652,8 @@ if lunch_warning_info and lunch_warning_info.get('start_time'):
     except Exception as e:
         print(f"Erro ao processar timer do aviso de almoço: {e}")
         st.session_state.lunch_warning_info = None
-            
+        
+        
 st_autorefresh(interval=refresh_interval, key='auto_rerun_key') 
 
 if st.session_state.get('play_sound', False):
@@ -792,7 +793,8 @@ with col_disponibilidade:
             
             skip_flag = skips.get(nome, False)
             if nome == responsavel:
-                display = f'<span style="background-color: #E75480; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;">🔥 {nome}</span>'
+                # <-- ALTERADO PARA NOVEMBRO AZUL
+                display = f'<span style="background-color: #007BFF; color: white; padding: 2px 6px; border-radius: 5px; font-weight: bold;">🔥 {nome}</span>'
             elif skip_flag:
                 display = f'**{nome}** :orange-background[Pulando ⏭️]'
             else:
