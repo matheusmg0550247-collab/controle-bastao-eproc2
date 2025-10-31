@@ -714,7 +714,7 @@ def handle_presencial_submission():
     else:
         atividade_final = atividade or "N/A"
 
-    # <-- MODIFICADO: Ler horas e minutos e criar objetos 'time' -->
+    # Ler horas e minutos e criar objetos 'time'
     inicio_h = st.session_state.get('reg_pres_inicio_h', 0)
     inicio_m = st.session_state.get('reg_pres_inicio_m', 0)
     fim_h = st.session_state.get('reg_pres_fim_h', 0)
@@ -905,7 +905,6 @@ with col_principal:
     # --- Bloco de Registro de Atividade (MODIFICADO) ---
     st.markdown("---")
     
-    # <-- MODIFICADO: Lógica de status para incluir erro de hora -->
     if st.session_state.last_reg_status == "success":
         st.success("Registro enviado com sucesso!")
         st.session_state.last_reg_status = None 
@@ -945,19 +944,20 @@ with col_principal:
             
     # --- Formulário "Presencial" (MODIFICADO) ---
     elif st.session_state.registro_tipo_selecao == "Presencial":
+        
+        # <-- CORREÇÃO: Selectbox movido para FORA do formulário -->
+        st.selectbox(
+            "Atividade:", 
+            REG_PRESENCIAL_ATIVIDADE_OPCOES, 
+            index=None, 
+            placeholder="Selecione a atividade", 
+            key='reg_pres_atividade'
+        )
+
         with st.form(key="form_presencial"):
             st.subheader(f"Registro de: **Presencial**")
-
-            # Atividade com lógica de "Outros"
-            st.selectbox(
-                "Atividade:", 
-                REG_PRESENCIAL_ATIVIDADE_OPCOES, 
-                index=None, 
-                placeholder="Selecione a atividade", 
-                key='reg_pres_atividade'
-            )
             
-            # <-- MODIFICADO: Verifica o session_state para mostrar o campo "Outros" -->
+            # <-- CORREÇÃO: Campo "Outros" agora DENTRO do form, mas lendo o estado -->
             if st.session_state.get('reg_pres_atividade') == "Outros":
                 st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
 
@@ -969,21 +969,21 @@ with col_principal:
             )
             st.text_input("Participantes Externos:", key='reg_pres_particip_externos')
             
-            # <-- MODIFICADO: Formato de data e campos de hora/minuto -->
             st.date_input("Data:", key='reg_pres_data', format="DD/MM/YYYY")
             
+            st.markdown("**Início:**")
             col_ini_1, col_ini_2 = st.columns(2)
             with col_ini_1:
-                st.number_input("Início (Hora)", min_value=0, max_value=23, step=1, key='reg_pres_inicio_h', format="%02d")
+                st.number_input("Hora", min_value=0, max_value=23, step=1, key='reg_pres_inicio_h', format="%02d", label_visibility="collapsed")
             with col_ini_2:
-                st.number_input("Início (Minuto)", min_value=0, max_value=59, step=1, key='reg_pres_inicio_m', format="%02d")
+                st.number_input("Minuto", min_value=0, max_value=59, step=1, key='reg_pres_inicio_m', format="%02d", label_visibility="collapsed")
 
+            st.markdown("**Fim:**")
             col_fim_1, col_fim_2 = st.columns(2)
             with col_fim_1:
-                st.number_input("Fim (Hora)", min_value=0, max_value=23, step=1, key='reg_pres_fim_h', format="%02d")
+                st.number_input("Hora ", min_value=0, max_value=23, step=1, key='reg_pres_fim_h', format="%02d", label_visibility="collapsed")
             with col_fim_2:
-                st.number_input("Fim (Minuto)", min_value=0, max_value=59, step=1, key='reg_pres_fim_m', format="%02d")
-            # <-- FIM MODIFICAÇÃO HORA/MINUTO -->
+                st.number_input("Minuto ", min_value=0, max_value=59, step=1, key='reg_pres_fim_m', format="%02d", label_visibility="collapsed")
 
             st.form_submit_button(
                 "Enviar Registro",
