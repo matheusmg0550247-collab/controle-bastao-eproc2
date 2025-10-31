@@ -68,10 +68,10 @@ REG_PRESENCIAL_ATIVIDADE_OPCOES = ["Sessão", "Homologação", "Treinamento", "C
 BASTAO_EMOJI = "💙" 
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
-STATUSES_DE_SAIDA = ['Atividade', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] 
+STATUSES_DE_SAIDA = ['Atendimento', 'Almoço', 'Saída Temporária', 'Ausente', 'Sessão'] # MODIFICADO: 'Atividade' para 'Atendimento'
 GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGlvdXp1aHZ1ejJqMnY5MG1yZmN0d3NqcDl1bTU1dDJrciZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/fXnRObM8Q0RkOmR5nf/giphy.gif'
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
-GIF_URL_LUNCH_WARNING = 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGZlbHN1azB3b2drdTI1eG10cDEzeWpmcmtwenZxNTV0bnc2OWgzZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bNlqpmBJRDMpxulfFB/giphy.gif'
+GIF_URL_LUNCH_WARNING = 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGZlbHN1azB3b2drdTI1eG10cDEzeWpmcmtwenZxNTV0bnc2OWgzZSYlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/bNlqpmBJRDMpxulfFB/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/main/doorbell-223669.mp3"
 # URL da Imagem Novembro Azul
 NOVEMBRO_AZUL_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/main/novembro-azul.png"
@@ -158,8 +158,8 @@ def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}"
 
 # --- Funções de Envio de Registro ---
 
-def send_atividade_to_chat(consultor, tipo_atendimento, form_data):
-    """Envia o registro de 'Atividade' para o webhook do Google Chat."""
+def send_atividade_to_chat(consultor, tipo_atendimento, form_data): # MODIFICADO: Nome da função de Atividade para Atendimento
+    """Envia o registro de 'Atendimento' para o webhook do Google Chat."""
     if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
         print("Webhook de registro não configurado.")
         return False
@@ -184,14 +184,14 @@ def send_atividade_to_chat(consultor, tipo_atendimento, form_data):
     try:
         response = requests.post(GOOGLE_CHAT_WEBHOOK_REGISTRO, json=chat_message)
         response.raise_for_status()
-        print("Registro de 'Atividade' enviado com sucesso.")
+        print("Registro de 'Atendimento' enviado com sucesso.")
         return True
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao enviar registro de 'Atividade': {e}")
+        print(f"Erro ao enviar registro de 'Atendimento': {e}")
         return False
 
-def send_presencial_to_chat(consultor, form_data):
-    """Envia o registro de 'Presencial' para o webhook do Google Chat."""
+def send_presencial_to_chat(consultor, form_data): # MODIFICADO: Nome da função de Presencial para Atividade
+    """Envia o registro de 'Atividade' para o webhook do Google Chat."""
     if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
         print("Webhook de registro não configurado.")
         return False
@@ -206,7 +206,7 @@ def send_presencial_to_chat(consultor, form_data):
     fim_str = form_data['fim'].strftime("%H:%M")
 
     message_text = (
-        f"**📅 Novo Registro Presencial**\n\n"
+        f"**📅 Novo Registro de Atividade**\n\n" # MODIFICADO: 'Presencial' para 'Atividade'
         f"**Consultor:** {consultor}\n"
         f"**Atividade:** {form_data['atividade']}\n"
         f"**Data:** {data_str}\n"
@@ -221,10 +221,10 @@ def send_presencial_to_chat(consultor, form_data):
     try:
         response = requests.post(GOOGLE_CHAT_WEBHOOK_REGISTRO, json=chat_message)
         response.raise_for_status()
-        print("Registro de 'Presencial' enviado com sucesso.")
+        print("Registro de 'Atividade' enviado com sucesso.") # MODIFICADO: 'Presencial' para 'Atividade'
         return True
     except requests.exceptions.RequestException as e:
-        print(f"Erro ao enviar registro de 'Presencial': {e}")
+        print(f"Erro ao enviar registro de 'Atividade': {e}") # MODIFICADO: 'Presencial' para 'Atividade'
         return False
 
 def send_chamado_to_chat(consultor, texto_chamado):
@@ -637,7 +637,7 @@ def toggle_skip():
     save_state() 
 
 def update_status(status_text, change_to_available): 
-    """Callback: Botões de Ação (Atividade, Almoço, etc.)."""
+    """Callback: Botões de Ação (Atendimento, Almoço, etc.).""" # MODIFICADO: 'Atividade' para 'Atendimento'
     print(f'CALLBACK UPDATE STATUS: {status_text}')
     selected = st.session_state.consultor_selectbox
     st.session_state.gif_warning = False; st.session_state.rotation_gif_start_time = None
@@ -658,7 +658,7 @@ def update_status(status_text, change_to_available):
     if status_text == 'Almoço' and not is_second_try:
         all_statuses = st.session_state.status_texto
         num_na_fila = sum(1 for s in all_statuses.values() if s == '' or s == 'Bastão')
-        num_atividade = sum(1 for s in all_statuses.values() if s == 'Atividade')
+        num_atividade = sum(1 for s in all_statuses.values() if s == 'Atendimento') # MODIFICADO: 'Atividade' para 'Atendimento'
         total_ativos = num_na_fila + num_atividade
         num_almoco = sum(1 for s in all_statuses.values() if s == 'Almoço')
         limite_almoco = total_ativos / 2.0
@@ -709,8 +709,8 @@ def manual_rerun():
 
 # --- Callbacks de Formulário de Registro ---
 
-def handle_atividade_submission():
-    """Callback: Envio do formulário 'Atividade'."""
+def handle_atividade_submission(): # MODIFICADO: Nome da função de Atividade para Atendimento
+    """Callback: Envio do formulário 'Atendimento'."""
     print("CALLBACK: handle_atividade_submission")
     
     consultor_selecionado = st.session_state.consultor_selectbox
@@ -725,7 +725,7 @@ def handle_atividade_submission():
         "desfecho": st.session_state.get('reg_desfecho') or "N/A"
     }
     
-    success = send_atividade_to_chat(consultor_selecionado, tipo_atendimento, form_data)
+    success = send_atividade_to_chat(consultor_selecionado, tipo_atendimento, form_data) # MODIFICADO: Nome da função
     
     if success:
         st.session_state.last_reg_status = "success"
@@ -740,8 +740,8 @@ def handle_atividade_submission():
     else:
         st.session_state.last_reg_status = "error"
 
-def handle_presencial_submission():
-    """Callback: Envio do formulário 'Presencial'."""
+def handle_presencial_submission(): # MODIFICADO: Nome da função de Presencial para Atividade
+    """Callback: Envio do formulário 'Atividade'."""
     print("CALLBACK: handle_presencial_submission")
     
     consultor_selecionado = st.session_state.consultor_selectbox
@@ -777,7 +777,7 @@ def handle_presencial_submission():
         "fim": fim_time        # Passa o objeto time
     }
     
-    success = send_presencial_to_chat(consultor_selecionado, form_data)
+    success = send_presencial_to_chat(consultor_selecionado, form_data) # MODIFICADO: Nome da função
     
     if success:
         st.session_state.last_reg_status = "success"
@@ -829,12 +829,12 @@ init_session_state()
 
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
 
-# <-- MODIFICADO: Título com Imagem (width ajustado para 80px) -->
+# <-- MODIFICADO: Título com Imagem (width ajustado para 120px) -->
 st.markdown(
     f"""
     <div style="display: flex; align-items: center; gap: 10px;">
         <h1 style="margin-bottom: 0;">Controle Bastão Cesupe {BASTAO_EMOJI}</h1>
-        <img src="{NOVEMBRO_AZUL_URL}" alt="Novembro Azul" style="width: 80px; height: auto;">
+        <img src="{NOVEMBRO_AZUL_URL}" alt="Novembro Azul" style="width: 120px; height: auto;">
     </div>
     """,
     unsafe_allow_html=True
@@ -966,7 +966,7 @@ with col_principal:
     
     c1.button('🎯 Passar', on_click=rotate_bastao, use_container_width=True, help='Passa o bastão para o próximo elegível. Apenas o responsável atual.')
     c2.button('⏭️ Pular', on_click=toggle_skip, use_container_width=True, help='Marca/Desmarca o consultor selecionado para ser pulado na próxima rotação.')
-    c3.button('✏️ Atividade', on_click=update_status, args=('Atividade', False,), use_container_width=True)
+    c3.button('✏️ Atendimento', on_click=update_status, args=('Atendimento', False,), use_container_width=True) # MODIFICADO: 'Atividade' para 'Atendimento'
     c4.button('🍽️ Almoço', on_click=update_status, args=('Almoço', False,), use_container_width=True)
     c5.button('👤 Ausente', on_click=update_status, args=('Ausente', False,), use_container_width=True)
     c6.button('🎙️ Sessão', on_click=update_status, args=('Sessão', False,), use_container_width=True)
@@ -994,20 +994,20 @@ with col_principal:
         st.error("Erro ao enviar registro. Hora ou minuto inválido.")
         st.session_state.last_reg_status = None
     
-    st.header("Registrar Atendimento")
+    st.header("Registrar Atendimento") # MODIFICADO: 'Atividade' para 'Atendimento'
 
     st.radio(
         "Tipo de Atendimento:",
-        ["Atividade", "Presencial"],
+        ["Atendimento", "Atividade"], # MODIFICADO: 'Atividade' para 'Atendimento' e 'Presencial' para 'Atividade'
         index=None,
         key='registro_tipo_selecao', 
         horizontal=True
     )
 
-    # --- Formulário "Atividade" ---
-    if st.session_state.registro_tipo_selecao == "Atividade":
+    # --- Formulário "Atendimento" --- # MODIFICADO: 'Atividade' para 'Atendimento'
+    if st.session_state.registro_tipo_selecao == "Atendimento": # MODIFICADO: 'Atividade' para 'Atendimento'
         with st.form(key="form_atividade"):
-            st.subheader(f"Registro de: **Atividade**")
+            st.subheader(f"Registro de: **Atendimento**") # MODIFICADO: 'Atividade' para 'Atendimento'
             
             st.selectbox("Usuário:", REG_USUARIO_OPCOES, index=None, placeholder="Selecione o tipo de usuário", key='reg_usuario')
             st.text_input("Nome-usuário - Setor:", key='reg_nome_setor')
@@ -1018,11 +1018,11 @@ with col_principal:
             
             st.form_submit_button(
                 "Enviar Registro",
-                on_click=handle_atividade_submission 
+                on_click=handle_atividade_submission # MODIFICADO: Nome da função
             )
             
-    # --- Formulário "Presencial" ---
-    elif st.session_state.registro_tipo_selecao == "Presencial":
+    # --- Formulário "Atividade" --- # MODIFICADO: 'Presencial' para 'Atividade'
+    elif st.session_state.registro_tipo_selecao == "Atividade": # MODIFICADO: 'Presencial' para 'Atividade'
         
         st.selectbox(
             "Atividade:", 
@@ -1034,7 +1034,7 @@ with col_principal:
 
         if st.session_state.get('reg_pres_atividade'):
             with st.form(key="form_presencial"):
-                st.subheader(f"Registro de: **Presencial** ({st.session_state.get('reg_pres_atividade')})")
+                st.subheader(f"Registro de: **Atividade** ({st.session_state.get('reg_pres_atividade')})") # MODIFICADO: 'Presencial' para 'Atividade'
                 
                 if st.session_state.get('reg_pres_atividade') == "Outros":
                     st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
@@ -1065,7 +1065,7 @@ with col_principal:
 
                 st.form_submit_button(
                     "Enviar Registro",
-                    on_click=handle_presencial_submission
+                    on_click=handle_presencial_submission # MODIFICADO: Nome da função
                 )
                 
     # --- Bloco Padrão Abertura de Chamados ---
@@ -1179,7 +1179,7 @@ with col_principal:
 with col_disponibilidade:
     st.header('Status dos Consultores')
     st.markdown('Marque/Desmarque para entrar/sair.')
-    ui_lists = {'fila': [], 'atividade': [], 'almoco': [], 'saida': [], 'ausente': [], 'sessao': [], 'indisponivel': []}
+    ui_lists = {'fila': [], 'atendimento': [], 'almoco': [], 'saida': [], 'ausente': [], 'sessao': [], 'indisponivel': []} # MODIFICADO: 'atividade' para 'atendimento'
     
     for nome in CONSULTORES:
         is_checked = st.session_state.get(f'check_{nome}', False)
@@ -1189,8 +1189,8 @@ with col_disponibilidade:
             ui_lists['fila'].insert(0, nome)
         elif status == '': 
             ui_lists['fila'].append(nome) 
-        elif status == 'Atividade': 
-            ui_lists['atividade'].append(nome)
+        elif status == 'Atendimento': # MODIFICADO: 'Atividade' para 'Atendimento'
+            ui_lists['atendimento'].append(nome) # MODIFICADO: 'atividade' para 'atendimento'
         elif status == 'Almoço': 
             ui_lists['almoco'].append(nome)
         elif status == 'Ausente':
@@ -1235,7 +1235,7 @@ with col_disponibilidade:
                 col_nome.markdown(f'**{nome}** :{tag_color}-background[{title}]', unsafe_allow_html=True)
         st.markdown('---')
 
-    render_section('Atividade', '✏️', ui_lists['atividade'], 'yellow')
+    render_section('Atendimento', '✏️', ui_lists['atendimento'], 'yellow') # MODIFICADO: 'Atividade' para 'Atendimento' e ui_lists
     render_section('Almoço', '🍽️', ui_lists['almoco'], 'blue')
     render_section('Ausente', '👤', ui_lists['ausente'], 'violet') 
     render_section('Sessão', '🎙️', ui_lists['sessao'], 'green')
