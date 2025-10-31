@@ -53,6 +53,10 @@ CHAT_WEBHOOK_BASTAO = ""
 
 # -- Constantes de Registro de Atividade --
 GOOGLE_CHAT_WEBHOOK_REGISTRO = "https://chat.googleapis.com/v1/spaces/AAQAVvsU4Lg/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=hSghjEZq8-1EmlfHdSoPRq_nTSpYc0usCs23RJOD-yk"
+
+# <-- NOVO: Webhook para Rascunho de Chamados -->
+GOOGLE_CHAT_WEBHOOK_CHAMADO = "https://chat.googleapis.com/v1/spaces/AAQAPPWlpW8/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=jMg2PkqtpIe3JbG_SZG_ZhcfuQQII9RXM0rZQienUZk"
+
 # Formulário "Atividade"
 REG_USUARIO_OPCOES = ["Cartório", "Externo", "Gabinete", "Interno"]
 REG_SISTEMA_OPCOES = ["Conveniados/Outros", "Eproc", "Themis", "JIPE", "SIAP"]
@@ -221,6 +225,40 @@ def send_presencial_to_chat(consultor, form_data):
         print(f"Erro ao enviar registro de 'Presencial': {e}")
         return False
 
+# <-- NOVO: Função de envio para Rascunho de Chamado -->
+def send_chamado_to_chat(consultor, texto_chamado):
+    """Envia o rascunho do chamado para o webhook específico."""
+    if not GOOGLE_CHAT_WEBHOOK_CHAMADO:
+        print("Webhook de chamado não configurado.")
+        return False
+
+    if not consultor or consultor == 'Selecione um nome':
+        print("Erro de registro de chamado: Consultor não selecionado.")
+        return False
+        
+    if not texto_chamado:
+        print("Erro de registro de chamado: Texto do chamado está vazio.")
+        return False # Não envia rascunho vazio
+
+    message_text = (
+        f"**🔔 Novo Rascunho de Chamado/Jira**\n\n"
+        f"**Consultor:** {consultor}\n"
+        f"--- (Início do Rascunho) ---\n"
+        f"{texto_chamado}\n"
+        f"--- (Fim do Rascunho) ---"
+    )
+    
+    chat_message = {'text': message_text}
+    try:
+        response = requests.post(GOOGLE_CHAT_WEBHOOK_CHAMADO, json=chat_message)
+        response.raise_for_status()
+        print("Rascunho de chamado enviado com sucesso.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao enviar rascunho de chamado: {e}")
+        return False
+# <-- FIM NOVO -->
+
 
 def load_logs(): 
     """Carrega logs do st.session_state local."""
@@ -350,7 +388,7 @@ def init_session_state():
         'gif_warning': False,
         'lunch_warning_info': None,
         'last_reg_status': None, # Flag para status de registro
-        'chamado_guide_step': 0 # <-- NOVO: Etapa do guia de chamados
+        'chamado_guide_step': 0 # Etapa do guia de chamados
     }
 
     for key, default in defaults.items():
@@ -758,10 +796,28 @@ def handle_presencial_submission():
     else:
         st.session_state.last_reg_status = "error"
 
-# <-- NOVO: Callback para o guia de chamados -->
+# <-- NOVO: Callbacks para o guia de chamados -->
 def set_chamado_step(step_num):
-    """Callback para atualizar a etapa do guia de chamados."""
+    """Callback para ATUALIZAR a etapa do guia de chamados."""
     st.session_state.chamado_guide_step = step_num
+
+def handle_chamado_submission():
+    """Callback: Envio do rascunho do chamado."""
+    print("CALLBACK: handle_chamado_submission")
+    
+    consultor = st.session_state.consultor_selectbox
+    texto_chamado = st.session_state.get("chamado_textarea", "")
+    
+    success = send_chamado_to_chat(consultor, texto_chamado)
+    
+    if success:
+        # Mensagem de sucesso específica!
+        st.session_state.last_reg_status = "success_chamado" 
+        st.session_state.chamado_guide_step = 0 # Fecha o guia
+        st.session_state.chamado_textarea = "" # Limpa o rascunho
+    else:
+        # Erro (Consultor não selecionado ou texto vazio)
+        st.session_state.last_reg_status = "error_chamado"
 # <-- FIM NOVO -->
 
 
@@ -912,12 +968,19 @@ with col_principal:
     # --- Bloco de Registro de Atividade ---
     st.markdown("---")
     
+    # <-- MODIFICADO: Lógica de status para incluir mensagens do chamado -->
     if st.session_state.last_reg_status == "success":
         st.success("Registro enviado com sucesso!")
         st.session_state.last_reg_status = None 
+    elif st.session_state.last_reg_status == "success_chamado":
+        st.success("Chamado enviado! A resposta será enviada no seu email institucional.")
+        st.session_state.last_reg_status = None
     elif st.session_state.last_reg_status == "error":
         st.error("Erro ao enviar registro. Verifique se seu nome está selecionado no menu 'Consultor' acima.")
-        st.session_state.last_reg_status = None 
+        st.session_state.last_reg_status = None
+    elif st.session_state.last_reg_status == "error_chamado":
+        st.error("Erro ao enviar chamado. Verifique se seu nome está selecionado e se o campo de rascunho não está vazio.")
+        st.session_state.last_reg_status = None
     elif st.session_state.last_reg_status == "error_time":
         st.error("Erro ao enviar registro. Hora ou minuto inválido.")
         st.session_state.last_reg_status = None
@@ -952,7 +1015,6 @@ with col_principal:
     # --- Formulário "Presencial" ---
     elif st.session_state.registro_tipo_selecao == "Presencial":
         
-        # Selectbox movido para FORA do formulário
         st.selectbox(
             "Atividade:", 
             REG_PRESENCIAL_ATIVIDADE_OPCOES, 
@@ -961,12 +1023,10 @@ with col_principal:
             key='reg_pres_atividade'
         )
 
-        # O formulário só aparece se uma atividade for selecionada
         if st.session_state.get('reg_pres_atividade'):
             with st.form(key="form_presencial"):
                 st.subheader(f"Registro de: **Presencial** ({st.session_state.get('reg_pres_atividade')})")
                 
-                # Campo "Outros" agora DENTRO do form, mas lendo o estado
                 if st.session_state.get('reg_pres_atividade') == "Outros":
                     st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
 
@@ -999,18 +1059,15 @@ with col_principal:
                     on_click=handle_presencial_submission
                 )
                 
-    # --- NOVO: Bloco Padrão Abertura de Chamados ---
+    # --- Bloco Padrão Abertura de Chamados (MODIFICADO) ---
     st.markdown("---")
     st.header("Padrão abertura de chamados / jiras")
 
-    # Pega a etapa atual do estado
     guide_step = st.session_state.get('chamado_guide_step', 0)
 
     if guide_step == 0:
-        # Botão para iniciar o guia
         st.button("Ver Padrão de Abertura", on_click=set_chamado_step, args=(1,), use_container_width=True)
     else:
-        # O "Modal" / Container do Guia
         with st.container(border=True):
             if guide_step == 1:
                 st.subheader("📄 Resumo e Passo 1: Testes Iniciais")
@@ -1091,8 +1148,24 @@ with col_principal:
                     key="chamado_textarea", 
                     label_visibility="collapsed"
                 )
-                st.button("Fechar", on_click=set_chamado_step, args=(0,))
-    # --- FIM NOVO ---
+                
+                # <-- MODIFICADO: Botões de Enviar e Cancelar -->
+                col_btn_1, col_btn_2 = st.columns(2)
+                with col_btn_1:
+                    st.button(
+                        "Enviar Rascunho", 
+                        on_click=handle_chamado_submission, # Chama o novo callback
+                        use_container_width=True,
+                        type="primary"
+                    )
+                with col_btn_2:
+                    st.button(
+                        "Cancelar", 
+                        on_click=set_chamado_step, 
+                        args=(0,), # Volta para a etapa 0
+                        use_container_width=True
+                    )
+    # --- FIM MODIFICAÇÃO ---
 
 
 # --- Coluna Disponibilidade ---
