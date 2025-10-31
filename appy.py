@@ -349,11 +349,12 @@ def init_session_state():
         'play_sound': False,
         'gif_warning': False,
         'lunch_warning_info': None,
-        'last_reg_status': None # Flag para status de registro
+        'last_reg_status': None, # Flag para status de registro
+        'chamado_guide_step': 0 # <-- NOVO: Etapa do guia de chamados
     }
 
     for key, default in defaults.items():
-        if key in ['play_sound', 'gif_warning', 'last_reg_status']: 
+        if key in ['play_sound', 'gif_warning', 'last_reg_status', 'chamado_guide_step']: 
             st.session_state.setdefault(key, default)
         else: 
             st.session_state[key] = persisted_state.get(key, default)
@@ -721,8 +722,8 @@ def handle_presencial_submission():
     fim_m = st.session_state.get('reg_pres_fim_m', 0)
     
     try:
-        inicio_time = time(inicio_h, inicio_m)
-        fim_time = time(fim_h, fim_m)
+        inicio_time = time(int(inicio_h), int(inicio_m))
+        fim_time = time(int(fim_h), int(fim_m))
     except ValueError as e:
         print(f"Erro ao criar objeto time: {e} (h:{inicio_h}, m:{inicio_m})")
         st.session_state.last_reg_status = "error_time" # Erro específico
@@ -756,6 +757,12 @@ def handle_presencial_submission():
         st.session_state.reg_pres_fim_m = 0
     else:
         st.session_state.last_reg_status = "error"
+
+# <-- NOVO: Callback para o guia de chamados -->
+def set_chamado_step(step_num):
+    """Callback para atualizar a etapa do guia de chamados."""
+    st.session_state.chamado_guide_step = step_num
+# <-- FIM NOVO -->
 
 
 # ============================================
@@ -902,7 +909,7 @@ with col_principal:
     st.markdown("####")
     st.button('🔄 Atualizar (Manual)', on_click=manual_rerun, use_container_width=True)
     
-    # --- Bloco de Registro de Atividade (MODIFICADO) ---
+    # --- Bloco de Registro de Atividade ---
     st.markdown("---")
     
     if st.session_state.last_reg_status == "success":
@@ -942,10 +949,10 @@ with col_principal:
                 on_click=handle_atividade_submission 
             )
             
-    # --- Formulário "Presencial" (MODIFICADO) ---
+    # --- Formulário "Presencial" ---
     elif st.session_state.registro_tipo_selecao == "Presencial":
         
-        # <-- CORREÇÃO: Selectbox movido para FORA do formulário -->
+        # Selectbox movido para FORA do formulário
         st.selectbox(
             "Atividade:", 
             REG_PRESENCIAL_ATIVIDADE_OPCOES, 
@@ -954,42 +961,138 @@ with col_principal:
             key='reg_pres_atividade'
         )
 
-        with st.form(key="form_presencial"):
-            st.subheader(f"Registro de: **Presencial**")
-            
-            # <-- CORREÇÃO: Campo "Outros" agora DENTRO do form, mas lendo o estado -->
-            if st.session_state.get('reg_pres_atividade') == "Outros":
-                st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
+        # O formulário só aparece se uma atividade for selecionada
+        if st.session_state.get('reg_pres_atividade'):
+            with st.form(key="form_presencial"):
+                st.subheader(f"Registro de: **Presencial** ({st.session_state.get('reg_pres_atividade')})")
+                
+                # Campo "Outros" agora DENTRO do form, mas lendo o estado
+                if st.session_state.get('reg_pres_atividade') == "Outros":
+                    st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
 
-            st.text_input("Descrição:", key='reg_pres_descricao')
-            st.text_input(
-                "Participantes Cesupe:", 
-                help="(Preencher se o registro for para mais de um consultor)", 
-                key='reg_pres_particip_cesupe'
-            )
-            st.text_input("Participantes Externos:", key='reg_pres_particip_externos')
-            
-            st.date_input("Data:", key='reg_pres_data', format="DD/MM/YYYY")
-            
-            st.markdown("**Início:**")
-            col_ini_1, col_ini_2 = st.columns(2)
-            with col_ini_1:
-                st.number_input("Hora", min_value=0, max_value=23, step=1, key='reg_pres_inicio_h', format="%02d", label_visibility="collapsed")
-            with col_ini_2:
-                st.number_input("Minuto", min_value=0, max_value=59, step=1, key='reg_pres_inicio_m', format="%02d", label_visibility="collapsed")
+                st.text_input("Descrição:", key='reg_pres_descricao')
+                st.text_input(
+                    "Participantes Cesupe:", 
+                    help="(Preencher se o registro for para mais de um consultor)", 
+                    key='reg_pres_particip_cesupe'
+                )
+                st.text_input("Participantes Externos:", key='reg_pres_particip_externos')
+                
+                st.date_input("Data:", key='reg_pres_data', format="DD/MM/YYYY")
+                
+                st.markdown("**Início:**")
+                col_ini_1, col_ini_2 = st.columns(2)
+                with col_ini_1:
+                    st.number_input("Hora", min_value=0, max_value=23, step=1, key='reg_pres_inicio_h', format="%02d", label_visibility="collapsed")
+                with col_ini_2:
+                    st.number_input("Minuto", min_value=0, max_value=59, step=1, key='reg_pres_inicio_m', format="%02d", label_visibility="collapsed")
 
-            st.markdown("**Fim:**")
-            col_fim_1, col_fim_2 = st.columns(2)
-            with col_fim_1:
-                st.number_input("Hora ", min_value=0, max_value=23, step=1, key='reg_pres_fim_h', format="%02d", label_visibility="collapsed")
-            with col_fim_2:
-                st.number_input("Minuto ", min_value=0, max_value=59, step=1, key='reg_pres_fim_m', format="%02d", label_visibility="collapsed")
+                st.markdown("**Fim:**")
+                col_fim_1, col_fim_2 = st.columns(2)
+                with col_fim_1:
+                    st.number_input("Hora ", min_value=0, max_value=23, step=1, key='reg_pres_fim_h', format="%02d", label_visibility="collapsed")
+                with col_fim_2:
+                    st.number_input("Minuto ", min_value=0, max_value=59, step=1, key='reg_pres_fim_m', format="%02d", label_visibility="collapsed")
 
-            st.form_submit_button(
-                "Enviar Registro",
-                on_click=handle_presencial_submission
-            )
-    # --- FIM MODIFICAÇÃO ---
+                st.form_submit_button(
+                    "Enviar Registro",
+                    on_click=handle_presencial_submission
+                )
+                
+    # --- NOVO: Bloco Padrão Abertura de Chamados ---
+    st.markdown("---")
+    st.header("Padrão abertura de chamados / jiras")
+
+    # Pega a etapa atual do estado
+    guide_step = st.session_state.get('chamado_guide_step', 0)
+
+    if guide_step == 0:
+        # Botão para iniciar o guia
+        st.button("Ver Padrão de Abertura", on_click=set_chamado_step, args=(1,), use_container_width=True)
+    else:
+        # O "Modal" / Container do Guia
+        with st.container(border=True):
+            if guide_step == 1:
+                st.subheader("📄 Resumo e Passo 1: Testes Iniciais")
+                st.markdown("""
+                O processo de abertura de chamados segue uma padronização dividida em três etapas principais:
+                
+                **PASSO 1: Testes Iniciais**
+                
+                Antes de abrir o chamado, o consultor deve primeiro realizar os procedimentos de suporte e testes necessários para **verificar e confirmar o problema** que foi relatado pelo usuário.
+                """)
+                st.button("Próximo (Passo 2) ➡️", on_click=set_chamado_step, args=(2,))
+            
+            elif guide_step == 2:
+                st.subheader("PASSO 2: Checklist de Abertura e Descrição")
+                st.markdown("""
+                Ao abrir o chamado, é obrigatório preencher um checklist com informações detalhadas para descrever a situação.
+                
+                **1. Dados do Usuário Envolvido**
+                * Nome completo
+                * Matrícula
+                * Tipo/perfil do usuário
+                * Número de telefone (celular ou ramal com prefixo)
+                
+                **2. Dados do Processo (Se aplicável)**
+                * Número(s) completo(s) do(s) processo(s) afetados
+                * Classe do(s) processo(s) afetados
+                
+                **3. Descrição do Erro**
+                * Descrever o **passo a passo exato** que levou ao erro.
+                * Indicar a data e o horário em que o erro ocorreu e qual a sua frequência (incidência).
+                
+                **4. Prints de Tela ou Vídeo**
+                * Anexar imagens do erro apresentado nos sistemas (SIAP, THEMIS, JPE, EPROC).
+                * Especificamente para o **THEMIS**, incluir um print da tela do **TOOLS** mostrando o log de erro.
+                
+                **5. Descrição dos Testes Realizados**
+                * Descrever todos os testes que foram feitos (ex: teste em outra máquina, com outro usuário, em outro processo).
+                * Informar se foi tentada alguma alternativa para contornar o erro e qual foi o resultado dessa tentativa.
+                
+                **6. Soluções de Contorno (Se houver)**
+                * Descrever qual solução de contorno foi utilizada para resolver o problema temporariamente.
+                
+                **7. Identificação do Consultor**
+                * Inserir a assinatura e identificação do consultor.
+                
+                > **Observação para a Abertura:**
+                > Ao abrir chamados na aba específica "CONSULTORES CESUPE - ERRO", deve-se verificar se o campo "Título Extra" está preenchido com o nome do setor responsável pela abertura (CESUPE).
+                """)
+                st.button("Próximo (Passo 3) ➡️", on_click=set_chamado_step, args=(3,))
+                
+            elif guide_step == 3:
+                st.subheader("PASSO 3: Registrar e Informar o Usuário por E-mail")
+                st.markdown("""
+                Após a abertura do chamado, o consultor deve enviar um e-mail ao usuário (serventuário) informando que:
+                
+                * A questão é de competência do setor de Informática do TJMG.
+                * Um chamado ($n^{\circ}$ CH) foi aberto junto ao referido departamento.
+                * O departamento de informática realizará as verificações e tomará as providências necessárias.
+                * O usuário deve aguardar, e o consultor entrará em contato assim que receber um feedback do departamento com as orientações.
+                """)
+                st.button("Próximo (Observações) ➡️", on_click=set_chamado_step, args=(4,))
+                
+            elif guide_step == 4:
+                st.subheader("Observações Gerais Importantes")
+                st.markdown("""
+                * **Comunicação:** O envio de qualquer informação ou documento para setores ou usuários deve ser feito apenas para o **e-mail institucional oficial**.
+                * **Atualização:** A atualização das informações sobre o andamento deve ser feita no **IN**.
+                * **Controle:** Cada consultor é **responsável por ter seu próprio controle** dos chamados que abriu, atualizá-los quando necessário e orientar o usuário.
+                """)
+                st.button("Entendi! Abrir campo de digitação ➡️", on_click=set_chamado_step, args=(5,))
+                
+            elif guide_step == 5:
+                st.subheader("Campo de Digitação do Chamado")
+                st.markdown("Utilize o campo abaixo para rascunhar seu chamado, seguindo o padrão lido. Você pode copiar e colar o texto daqui.")
+                st.text_area(
+                    "Rascunho do Chamado:", 
+                    height=300, 
+                    key="chamado_textarea", 
+                    label_visibility="collapsed"
+                )
+                st.button("Fechar", on_click=set_chamado_step, args=(0,))
+    # --- FIM NOVO ---
 
 
 # --- Coluna Disponibilidade ---
