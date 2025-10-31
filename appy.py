@@ -73,7 +73,7 @@ GIF_URL_WARNING = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExY2pjMDN0NGl
 GIF_URL_ROTATION = 'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmx4azVxbGt4Mnk1cjMzZm5sMmp1YThteGJsMzcyYmhsdmFoczV0aSZlcD12MV9pbnRlcm5uYWxfZ2lmX2J5X2lkJmN0PWc/JpkZEKWY0s9QI4DGvF/giphy.gif'
 GIF_URL_LUNCH_WARNING = 'https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExMGZlbHN1azB3b2drdTI1eG10cDEzeWpmcmtwenZxNTV0bnc2OWgzZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bNlqpmBJRDMpxulfFB/giphy.gif'
 SOUND_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/main/doorbell-223669.mp3"
-# <-- NOVO: URL da Imagem Novembro Azul -->
+# URL da Imagem Novembro Azul
 NOVEMBRO_AZUL_URL = "https://github.com/matheusmg0550247-collab/controle-bastao-eproc2/raw/main/novembro-azul.png"
 
 # ============================================
@@ -829,12 +829,12 @@ init_session_state()
 
 st.components.v1.html("<script>window.scrollTo(0, 0);</script>", height=0)
 
-# <-- MODIFICADO: Título com Imagem -->
+# <-- MODIFICADO: Título com Imagem (width ajustado para 80px) -->
 st.markdown(
     f"""
     <div style="display: flex; align-items: center; gap: 10px;">
         <h1 style="margin-bottom: 0;">Controle Bastão Cesupe {BASTAO_EMOJI}</h1>
-        <img src="{NOVEMBRO_AZUL_URL}" alt="Novembro Azul" style="width: 50px; height: auto;">
+        <img src="{NOVEMBRO_AZUL_URL}" alt="Novembro Azul" style="width: 80px; height: auto;">
     </div>
     """,
     unsafe_allow_html=True
