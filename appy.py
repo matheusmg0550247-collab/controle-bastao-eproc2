@@ -58,7 +58,7 @@ REG_USUARIO_OPCOES = ["Cartório", "Externo", "Gabinete", "Interno"]
 REG_SISTEMA_OPCOES = ["Conveniados/Outros", "Eproc", "Themis", "JIPE", "SIAP"]
 REG_CANAL_OPCOES = ["Email", "Telefone", "Whatsapp"]
 REG_DESFECHO_OPCOES = ["Escalonado", "Resolvido - Cesupe"]
-# <-- NOVO: Formulário "Presencial" -->
+# Formulário "Presencial"
 REG_PRESENCIAL_ATIVIDADE_OPCOES = ["Sessão", "Homologação", "Treinamento", "Chamado/Jira", "Atendimento", "Outros"]
 
 BASTAO_EMOJI = "💙" 
@@ -184,7 +184,6 @@ def send_atividade_to_chat(consultor, tipo_atendimento, form_data):
         print(f"Erro ao enviar registro de 'Atividade': {e}")
         return False
 
-# <-- NOVO: Função de envio para 'Presencial' -->
 def send_presencial_to_chat(consultor, form_data):
     """Envia o registro de 'Presencial' para o webhook do Google Chat."""
     if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
@@ -221,7 +220,6 @@ def send_presencial_to_chat(consultor, form_data):
     except requests.exceptions.RequestException as e:
         print(f"Erro ao enviar registro de 'Presencial': {e}")
         return False
-# <-- FIM NOVO -->
 
 
 def load_logs(): 
@@ -703,7 +701,6 @@ def handle_atividade_submission():
     else:
         st.session_state.last_reg_status = "error"
 
-# <-- NOVO: Callback para formulário 'Presencial' -->
 def handle_presencial_submission():
     """Callback: Envio do formulário 'Presencial'."""
     print("CALLBACK: handle_presencial_submission")
@@ -717,14 +714,28 @@ def handle_presencial_submission():
     else:
         atividade_final = atividade or "N/A"
 
+    # <-- MODIFICADO: Ler horas e minutos e criar objetos 'time' -->
+    inicio_h = st.session_state.get('reg_pres_inicio_h', 0)
+    inicio_m = st.session_state.get('reg_pres_inicio_m', 0)
+    fim_h = st.session_state.get('reg_pres_fim_h', 0)
+    fim_m = st.session_state.get('reg_pres_fim_m', 0)
+    
+    try:
+        inicio_time = time(inicio_h, inicio_m)
+        fim_time = time(fim_h, fim_m)
+    except ValueError as e:
+        print(f"Erro ao criar objeto time: {e} (h:{inicio_h}, m:{inicio_m})")
+        st.session_state.last_reg_status = "error_time" # Erro específico
+        return
+
     form_data = {
         "atividade": atividade_final,
         "descricao": st.session_state.get('reg_pres_descricao') or "N/A",
         "particip_cesupe": st.session_state.get('reg_pres_particip_cesupe') or "N/A",
         "particip_externos": st.session_state.get('reg_pres_particip_externos') or "N/A",
         "data": st.session_state.get('reg_pres_data') or date.today(),
-        "inicio": st.session_state.get('reg_pres_inicio') or time(0, 0),
-        "fim": st.session_state.get('reg_pres_fim') or time(0, 0)
+        "inicio": inicio_time, # Passa o objeto time
+        "fim": fim_time        # Passa o objeto time
     }
     
     success = send_presencial_to_chat(consultor_selecionado, form_data)
@@ -738,10 +749,13 @@ def handle_presencial_submission():
         st.session_state.reg_pres_descricao = ""
         st.session_state.reg_pres_particip_cesupe = ""
         st.session_state.reg_pres_particip_externos = ""
-        # Data e hora podem manter o padrão
+        # Limpa os campos de hora/minuto
+        st.session_state.reg_pres_inicio_h = 0
+        st.session_state.reg_pres_inicio_m = 0
+        st.session_state.reg_pres_fim_h = 0
+        st.session_state.reg_pres_fim_m = 0
     else:
         st.session_state.last_reg_status = "error"
-# <-- FIM NOVO -->
 
 
 # ============================================
@@ -891,12 +905,16 @@ with col_principal:
     # --- Bloco de Registro de Atividade (MODIFICADO) ---
     st.markdown("---")
     
+    # <-- MODIFICADO: Lógica de status para incluir erro de hora -->
     if st.session_state.last_reg_status == "success":
         st.success("Registro enviado com sucesso!")
         st.session_state.last_reg_status = None 
     elif st.session_state.last_reg_status == "error":
         st.error("Erro ao enviar registro. Verifique se seu nome está selecionado no menu 'Consultor' acima.")
         st.session_state.last_reg_status = None 
+    elif st.session_state.last_reg_status == "error_time":
+        st.error("Erro ao enviar registro. Hora ou minuto inválido.")
+        st.session_state.last_reg_status = None
     
     st.header("Registrar Atendimento")
 
@@ -925,13 +943,13 @@ with col_principal:
                 on_click=handle_atividade_submission 
             )
             
-    # --- NOVO: Formulário "Presencial" ---
+    # --- Formulário "Presencial" (MODIFICADO) ---
     elif st.session_state.registro_tipo_selecao == "Presencial":
         with st.form(key="form_presencial"):
             st.subheader(f"Registro de: **Presencial**")
 
             # Atividade com lógica de "Outros"
-            atividade_selecionada = st.selectbox(
+            st.selectbox(
                 "Atividade:", 
                 REG_PRESENCIAL_ATIVIDADE_OPCOES, 
                 index=None, 
@@ -939,7 +957,8 @@ with col_principal:
                 key='reg_pres_atividade'
             )
             
-            if atividade_selecionada == "Outros":
+            # <-- MODIFICADO: Verifica o session_state para mostrar o campo "Outros" -->
+            if st.session_state.get('reg_pres_atividade') == "Outros":
                 st.text_input("Especifique a atividade:", key='reg_pres_atividade_outro')
 
             st.text_input("Descrição:", key='reg_pres_descricao')
@@ -950,19 +969,27 @@ with col_principal:
             )
             st.text_input("Participantes Externos:", key='reg_pres_particip_externos')
             
-            col_data, col_inicio, col_fim = st.columns(3)
-            with col_data:
-                st.date_input("Data:", key='reg_pres_data')
-            with col_inicio:
-                st.time_input("Início:", key='reg_pres_inicio')
-            with col_fim:
-                st.time_input("Fim:", key='reg_pres_fim')
+            # <-- MODIFICADO: Formato de data e campos de hora/minuto -->
+            st.date_input("Data:", key='reg_pres_data', format="DD/MM/YYYY")
+            
+            col_ini_1, col_ini_2 = st.columns(2)
+            with col_ini_1:
+                st.number_input("Início (Hora)", min_value=0, max_value=23, step=1, key='reg_pres_inicio_h', format="%02d")
+            with col_ini_2:
+                st.number_input("Início (Minuto)", min_value=0, max_value=59, step=1, key='reg_pres_inicio_m', format="%02d")
+
+            col_fim_1, col_fim_2 = st.columns(2)
+            with col_fim_1:
+                st.number_input("Fim (Hora)", min_value=0, max_value=23, step=1, key='reg_pres_fim_h', format="%02d")
+            with col_fim_2:
+                st.number_input("Fim (Minuto)", min_value=0, max_value=59, step=1, key='reg_pres_fim_m', format="%02d")
+            # <-- FIM MODIFICAÇÃO HORA/MINUTO -->
 
             st.form_submit_button(
                 "Enviar Registro",
-                on_click=handle_presencial_submission # <-- Chama o novo callback
+                on_click=handle_presencial_submission
             )
-    # --- FIM NOVO ---
+    # --- FIM MODIFICAÇÃO ---
 
 
 # --- Coluna Disponibilidade ---
