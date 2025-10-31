@@ -51,6 +51,15 @@ def get_global_state_cache():
 # Webhook para o qual o relatório diário será enviado
 GOOGLE_CHAT_WEBHOOK_BACKUP = "https://chat.googleapis.com/v1/spaces/AAQA0V8TAhs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Zl7KMv0PLrm5c7IMZZdaclfYoc-je9ilDDAlDfqDMAU"
 CHAT_WEBHOOK_BASTAO = "" # Webhook para notificações de giro (mantido)
+
+# <-- NOVO: Webhook e Constantes para Registro de Atividade -->
+GOOGLE_CHAT_WEBHOOK_REGISTRO = "https://chat.googleapis.com/v1/spaces/AAQAVvsU4Lg/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=hSghjEZq8-1EmlfHdSoPRq_nTSpYc0usCs23RJOD-yk"
+REG_USUARIO_OPCOES = ["Cartório", "Externo", "Gabinete", "Interno"]
+REG_SISTEMA_OPCOES = ["Conveniados/Outros", "Eproc", "Themis", "JIPE", "SIAP"]
+REG_CANAL_OPCOES = ["Email", "Telefone", "Whatsapp"]
+REG_DESFECHO_OPCOES = ["Escalonado", "Resolvido - Cesupe"]
+# <-- FIM NOVO -->
+
 BASTAO_EMOJI = "💙" # <-- ALTERADO PARA NOVEMBRO AZUL
 APP_URL_CLOUD = 'https://controle-bastao-cesupe.streamlit.app'
 STATUS_SAIDA_PRIORIDADE = ['Saída Temporária']
@@ -142,6 +151,44 @@ def send_chat_notification_internal(consultor, status):
 
 
 def play_sound_html(): return f'<audio autoplay="true"><source src="{SOUND_URL}" type="audio/mpeg"></audio>'
+
+# <-- NOVO: Função para enviar registro de atividade -->
+def send_registro_to_chat(consultor, tipo_atendimento, form_data):
+    """Envia o registro de atividade para o webhook do Google Chat."""
+    if not GOOGLE_CHAT_WEBHOOK_REGISTRO:
+        print("Webhook de registro não configurado.")
+        st.error("Webhook de registro não está configurado.")
+        return False
+
+    if not consultor or consultor == 'Selecione um nome':
+        st.error("Selecione seu nome no menu 'Consultor' antes de enviar o registro.")
+        return False
+
+    message_text = (
+        f"**📋 Novo Registro de Atendimento**\n\n"
+        f"**Consultor:** {consultor}\n"
+        f"**Tipo:** {tipo_atendimento}\n"
+        f"**Usuário:** {form_data['usuario']}\n"
+        f"**Nome/Setor:** {form_data['nome_setor']}\n"
+        f"**Sistema:** {form_data['sistema']}\n"
+        f"**Canal:** {form_data['canal']}\n"
+        f"**Desfecho:** {form_data['desfecho']}\n"
+        f"**Descrição:** {form_data['descricao']}\n"
+    )
+    
+    chat_message = {'text': message_text}
+    try:
+        response = requests.post(GOOGLE_CHAT_WEBHOOK_REGISTRO, json=chat_message)
+        response.raise_for_status()
+        print("Registro de atividade enviado com sucesso.")
+        st.success(f"Registro de {tipo_atendimento} enviado com sucesso!")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao enviar registro de atividade: {e}")
+        st.error(f"Erro ao enviar registro: {e}")
+        return False
+# <-- FIM NOVO -->
+
 
 # <-- MODIFICADO: Lê logs do session_state -->
 def load_logs(): 
@@ -752,7 +799,57 @@ with col_principal:
     
     st.markdown("####")
     st.button('🔄 Atualizar (Manual)', on_click=manual_rerun, use_container_width=True)
+    
+    # --- NOVO: Bloco de Registro de Atividade ---
     st.markdown("---")
+    st.header("Registrar Atendimento")
+
+    # Usar 'index=None' permite que o radio comece desmarcado
+    tipo_atendimento = st.radio(
+        "Tipo de Atendimento:",
+        ["Atividade", "Presencial"],
+        index=None,
+        key='registro_tipo_selecao',
+        horizontal=True
+    )
+
+    if tipo_atendimento:
+        with st.form(key="registro_form", clear_on_submit=True):
+            st.subheader(f"Registro de: **{tipo_atendimento}**")
+            
+            # Coletar dados do formulário
+            reg_usuario = st.selectbox("Usuário:", REG_USUARIO_OPCOES, index=None, placeholder="Selecione o tipo de usuário")
+            reg_nome_setor = st.text_input("Nome-usuário - Setor:")
+            reg_sistema = st.selectbox("Sistema:", REG_SISTEMA_OPCOES, index=None, placeholder="Selecione o sistema")
+            reg_descricao = st.text_input("Descrição do atendimento (até 7 palavras):")
+            reg_canal = st.selectbox("Canal de atendimento:", REG_CANAL_OPCOES, index=None, placeholder="Selecione o canal")
+            reg_desfecho = st.selectbox("Desfecho:", REG_DESFECHO_OPCOES, index=None, placeholder="Selecione o desfecho")
+            
+            # Botão de envio do formulário
+            submitted = st.form_submit_button("Enviar Registro")
+
+        if submitted:
+            consultor_selecionado = st.session_state.consultor_selectbox
+            
+            # Agrupar dados do formulário
+            form_data = {
+                "usuario": reg_usuario or "N/A",
+                "nome_setor": reg_nome_setor or "N/A",
+                "sistema": reg_sistema or "N/A",
+                "descricao": reg_descricao or "N/A",
+                "canal": reg_canal or "N/A",
+                "desfecho": reg_desfecho or "N/A"
+            }
+            
+            # Enviar para o webhook
+            success = send_registro_to_chat(consultor_selecionado, tipo_atendimento, form_data)
+            
+            if success:
+                # Limpa a seleção do radio button para esconder o formulário
+                st.session_state.registro_tipo_selecao = None
+                st.rerun() # Força o rerun para esconder o formulário imediatamente
+    # --- FIM NOVO ---
+
 
 # --- Coluna Disponibilidade ---
 with col_disponibilidade:
